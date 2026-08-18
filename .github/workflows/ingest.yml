@@ -1,0 +1,75 @@
+name: Scheduled ingest
+
+# Backup / alternative to Vercel Cron.
+#
+# Two modes:
+#   1. If INGEST_URL + CRON_SECRET secrets are set, this pings the deployed
+#      app's cron endpoint (cheapest, keeps all logic server-side).
+#   2. Otherwise, if Supabase secrets are set, it runs the pipeline here in
+#      the Action and writes straight to your database.
+
+on:
+  schedule:
+    # Every 4 hours, offset off the hour to avoid the top-of-hour rush.
+    - cron: '17 */4 * * *'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Comma-separated source ids (blank = all)'
+        required: false
+        default: ''
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  ping-deployment:
+    name: Trigger refresh on the deployed app
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: ${{ vars.INGEST_URL != '' }}
+
+    steps:
+      - name: Call cron endpoint
+        run: |
+          set -euo pipefail
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
+            --max-time 600 \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${INGEST_URL}")
+          echo "HTTP $code"
+          head -c 4000 /tmp/out.json
+          echo
+          test "$code" = "200"
+        env:
+          INGEST_URL: ${{ vars.INGEST_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+
+  run-locally:
+    name: Run pipeline in CI and write to Supabase
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Set the repository variable USE_LOCAL_INGEST=true (Settings -> Secrets
+    # and variables -> Actions -> Variables) to run the pipeline here instead.
+    if: ${{ vars.INGEST_URL == '' && vars.USE_LOCAL_INGEST == 'true' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Ingest
+        run: npm run ingest -- --budget 900000 ${{ github.event.inputs.only && format('--only {0}', github.event.inputs.only) || '' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          JOOBLE_API_KEY: ${{ secrets.JOOBLE_API_KEY }}
+          CRAWLER_CONTACT: ${{ vars.CRAWLER_CONTACT }}

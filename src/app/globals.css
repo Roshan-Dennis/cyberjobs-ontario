@@ -1,0 +1,130 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg: 248 250 252;
+  --surface: 255 255 255;
+  --surface2: 241 245 249;
+  --line: 226 232 240;
+  --ink: 15 23 42;
+  --muted: 100 116 139;
+  --brand: 13 110 253;
+  --brand-ink: 255 255 255;
+  --good: 5 150 105;
+  --warn: 217 119 6;
+}
+
+.dark {
+  --bg: 8 12 20;
+  --surface: 17 24 39;
+  --surface2: 26 34 48;
+  --line: 45 55 72;
+  --ink: 226 232 240;
+  --muted: 148 163 184;
+  --brand: 96 165 250;
+  --brand-ink: 8 12 20;
+  --good: 52 211 153;
+  --warn: 251 191 36;
+}
+
+* {
+  border-color: rgb(var(--line));
+}
+
+html {
+  color-scheme: light;
+}
+
+.dark html,
+html.dark {
+  color-scheme: dark;
+}
+
+body {
+  background-color: rgb(var(--bg));
+  color: rgb(var(--ink));
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-line bg-surface shadow-card;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-sm font-medium transition-colors;
+    @apply hover:bg-surface2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2;
+  }
+
+  .btn-primary {
+    @apply border-transparent bg-brand text-brandInk hover:opacity-90;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-line bg-surface2 px-2.5 py-1 text-xs font-medium text-muted;
+  }
+
+  .chip-active {
+    @apply border-brand bg-brand text-brandInk;
+  }
+
+  .input {
+    @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted;
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-brand;
+  }
+
+  .label {
+    @apply text-xs font-semibold uppercase tracking-wide text-muted;
+  }
+
+  .link {
+    @apply text-brand underline-offset-2 hover:underline;
+  }
+}
+
+.prose-job {
+  @apply text-sm leading-relaxed text-ink;
+}
+.prose-job h1,
+.prose-job h2,
+.prose-job h3,
+.prose-job h4 {
+  @apply mb-2 mt-5 text-base font-semibold text-ink;
+}
+.prose-job p {
+  @apply mb-3;
+}
+.prose-job ul,
+.prose-job ol {
+  @apply mb-3 ml-5 list-disc space-y-1;
+}
+.prose-job ol {
+  @apply list-decimal;
+}
+.prose-job a {
+  @apply text-brand underline;
+}
+.prose-job strong {
+  @apply font-semibold;
+}
+.prose-job table {
+  @apply mb-3 w-full text-left text-xs;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--line));
+  border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
