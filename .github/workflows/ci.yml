@@ -59,7 +59,11 @@ jobs:
 
       - run: npm ci
 
+      # jobbank is deliberately excluded. Job Bank blocks GitHub Actions runner
+      # IPs — every request answers 503 from here — so including it tests
+      # nothing and costs the source its full time budget. Verify that
+      # connector from a deployed environment via /api/cron/ingest instead.
       - name: Dry-run ingest (no writes)
-        run: npm run ingest -- --dry-run --only greenhouse,lever,ashby,jobbank,workday --budget 420000
+        run: npm run ingest -- --dry-run --only greenhouse,lever,ashby,workday --budget 420000
         env:
           NEXT_TELEMETRY_DISABLED: '1'
