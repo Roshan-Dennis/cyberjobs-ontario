@@ -15,6 +15,8 @@ import { parseSalary } from '../src/lib/normalize/salary';
 import { matchLocation } from '../src/lib/taxonomy/ontario';
 import { normalizeTitle, inferExperienceLevel } from '../src/lib/taxonomy/titles';
 import { buildDeepLinks } from '../src/lib/deeplinks';
+import { TOKENS as JOBBANK_TOKENS, parseFeed as parseJobBankFeed } from '../src/lib/sources/jobbank';
+import { activeSources } from '../src/lib/sources/registry';
 import type { RawJob } from '../src/lib/types';
 
 let passed = 0;
@@ -295,6 +297,58 @@ check('LinkedIn link built', links.some((l) => l.site === 'LinkedIn' && l.url.in
 check('Indeed link built', links.some((l) => l.site === 'Indeed Canada' && l.url.includes('fromage=7')));
 check('Location encoded', links[0].url.includes('Toronto'));
 check('All links absolute https', links.every((l) => l.url.startsWith('https://')));
+
+/* ------------------------------------------------------------------ */
+section('Job Bank connector (regression guards)');
+
+// The first live run fetched 0 from Job Bank because the query terms were
+// multi-word: Job Bank reinterprets those as an employer name and returns
+// nothing. Every token must be a single word.
+check('Job Bank tokens found', JOBBANK_TOKENS.length >= 10, JOBBANK_TOKENS.length);
+check(
+  'Every Job Bank token is a single word',
+  JOBBANK_TOKENS.every((t) => !/\s/.test(t)),
+  JOBBANK_TOKENS.filter((t) => /\s/.test(t)),
+);
+
+// The Atom fallback must survive a restyle of the results page.
+const FEED_FIXTURE = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xml:lang="en">
+ <title><![CDATA[cybersecurity - Job Bank]]></title>
+ <entry>
+  <title type="html"><![CDATA[cybersecurity consultant]]></title>
+  <link rel="alternate" type="text/html" href="https://www.jobbank.gc.ca/jobsearch/jobposting/10233755446?source=searchresults"/>
+  <id>https://www.jobbank.gc.ca/jobsearch/jobposting/10233755446</id>
+  <updated>2026-08-18T10:00:00Z</updated>
+  <summary type="html"><![CDATA[<strong>Job number:</strong> 10233755446<br /><strong>Location:</strong> Toronto (ON)  <br /><strong>Employer:</strong> Adisoft Inc<br /><strong>Salary:</strong> $60.00 to $120.00 hourly]]></summary>
+ </entry>
+</feed>`;
+
+const feedJobs = parseJobBankFeed(FEED_FIXTURE);
+check('Feed parses one entry', feedJobs.length === 1, feedJobs.length);
+check('Feed title', feedJobs[0]?.title === 'cybersecurity consultant', feedJobs[0]?.title);
+check('Feed employer', feedJobs[0]?.company === 'Adisoft Inc', feedJobs[0]?.company);
+check('Feed location', feedJobs[0]?.locationRaw === 'Toronto (ON)', feedJobs[0]?.locationRaw);
+check('Feed salary', feedJobs[0]?.salaryRaw === '$60.00 to $120.00 hourly', feedJobs[0]?.salaryRaw);
+check('Feed strips query string from url', feedJobs[0]?.applyUrl.endsWith('/10233755446'), feedJobs[0]?.applyUrl);
+
+const feedJob = normalizeJob(
+  feedJobs[0] ?? raw({}),
+);
+check('Feed entry normalises into a job', feedJob.job !== null, feedJob.reason);
+check('Feed entry lands in Toronto', feedJob.job?.city === 'Toronto', feedJob.job?.city);
+
+/* ------------------------------------------------------------------ */
+section('Source selection honours the environment at call time');
+
+process.env.INGEST_SOURCES = 'greenhouse,lever';
+check('--only style filter applies', activeSources().map((s) => s.id).join(',') === 'greenhouse,lever', activeSources().map((s) => s.id));
+process.env.INGEST_SOURCES = '';
+delete process.env.INGEST_SOURCES;
+process.env.INGEST_DISABLED_SOURCES = 'workday';
+check('Disable list applies', !activeSources().some((s) => s.id === 'workday'));
+delete process.env.INGEST_DISABLED_SOURCES;
+check('All sources return when unset', activeSources().length >= 10, activeSources().length);
 
 /* ------------------------------------------------------------------ */
 console.log(`\n${'='.repeat(70)}`);
