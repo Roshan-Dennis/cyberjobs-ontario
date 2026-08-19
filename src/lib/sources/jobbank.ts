@@ -9,9 +9,12 @@ import type { RawJob } from '@/lib/types';
 const HOST = 'www.jobbank.gc.ca';
 const ORIGIN = `https://${HOST}`;
 const SEARCH = `${ORIGIN}/jobsearch/jobsearch`;
+const FEED = `${ORIGIN}/jobsearch/feed/jobSearchRSSfeed`;
 
 /**
- * Job Bank (Government of Canada). robots.txt at the time of writing is:
+ * Job Bank (Government of Canada).
+ *
+ * robots.txt at the time of writing is:
  *
  *   User-agent: *
  *   Crawl-delay: 5
@@ -20,32 +23,51 @@ const SEARCH = `${ORIGIN}/jobsearch/jobsearch`;
  * disallowed. We re-check robots.txt on every run and abort if that changes.
  * Content is Government of Canada material available under the Open
  * Government Licence – Canada.
+ *
+ * IMPORTANT — single-word queries only.
+ * `searchstring` must be a single token. Job Bank reinterprets a multi-word
+ * value as an *employer name* ("cyber security" renders as the filter chip
+ * `Employer:cyber security`) and returns zero results. The first live run used
+ * phrases like "cyber security" and "incident response" and consequently
+ * fetched nothing at all from this source despite crawling successfully for
+ * 36 seconds. Keep every entry in TOKENS a single word.
  */
 
 interface Query {
-  search: string;
+  token: string;
   location: string;
-  label: string;
+  province: string | null;
 }
 
-const QUERIES: Query[] = [
-  { search: 'cyber security', location: 'Ontario', label: 'cyber security / ON' },
-  { search: 'cybersecurity analyst', location: 'Ontario', label: 'cybersecurity analyst / ON' },
-  { search: 'information security', location: 'Ontario', label: 'information security / ON' },
-  { search: 'security analyst', location: 'Ontario', label: 'security analyst / ON' },
-  { search: 'IT security', location: 'Ontario', label: 'IT security / ON' },
-  { search: 'network security', location: 'Ontario', label: 'network security / ON' },
-  { search: 'security engineer', location: 'Ontario', label: 'security engineer / ON' },
-  { search: 'penetration tester', location: 'Ontario', label: 'penetration tester / ON' },
-  { search: 'incident response', location: 'Ontario', label: 'incident response / ON' },
-  { search: 'security operations centre', location: 'Ontario', label: 'SOC / ON' },
-  { search: 'identity access management', location: 'Ontario', label: 'IAM / ON' },
-  { search: 'cloud security', location: 'Ontario', label: 'cloud security / ON' },
-  { search: 'information technology support', location: 'Ontario', label: 'IT support / ON' },
-  { search: 'systems administrator', location: 'Ontario', label: 'sysadmin / ON' },
-  { search: 'network administrator', location: 'Ontario', label: 'network admin / ON' },
-  { search: 'cyber security', location: 'Canada', label: 'cyber security / remote CA' },
+/** Single-token keywords. Noise is fine — the relevance classifier filters it. */
+export const TOKENS = [
+  'cybersecurity',
+  'security',
+  'cyber',
+  'infosec',
+  'SOC',
+  'SIEM',
+  'firewall',
+  'forensic',
+  'penetration',
+  'vulnerability',
+  'compliance',
+  'helpdesk',
+  'sysadmin',
+  'network',
 ];
+
+function buildQueries(): Query[] {
+  const queries: Query[] = TOKENS.map((token) => ({ token, location: 'Ontario', province: 'ON' }));
+  // A couple of Canada-wide passes to pick up remote roles.
+  queries.push({ token: 'cybersecurity', location: 'Canada', province: null });
+  queries.push({ token: 'security', location: 'Canada', province: null });
+  return queries;
+}
+
+/* ------------------------------------------------------------------ */
+/* HTML search results                                                 */
+/* ------------------------------------------------------------------ */
 
 function text($: cheerio.CheerioAPI, el: cheerio.Cheerio<never>, selector: string): string {
   const node = el.find(selector).first();
@@ -54,7 +76,16 @@ function text($: cheerio.CheerioAPI, el: cheerio.Cheerio<never>, selector: strin
   return node.text().replace(/\s+/g, ' ').trim();
 }
 
-function parseResults(html: string, queryLabel: string): RawJob[] {
+/**
+ * Result markup (verified against the live site):
+ *   article.action-buttons > a.resultJobItem
+ *     h3.title > span.noctitle              -> job title
+ *     ul.list-unstyled > li.date            -> "Posted on <date>"
+ *                       > li.business       -> employer
+ *                       > li.location       -> location
+ *                       > li.salary         -> salary
+ */
+function parseSearchHtml(html: string): RawJob[] {
   const $ = cheerio.load(html);
   const out: RawJob[] = [];
 
@@ -73,16 +104,17 @@ function parseResults(html: string, queryLabel: string): RawJob[] {
     title = title.replace(/^\s*\d+\s*/, '').trim();
     if (!title) return;
 
-    const company = text($, article, '.business') || text($, article, 'li.business') || 'Employer not disclosed';
-    const location = text($, article, '.location') || text($, article, 'li.location') || 'Ontario, Canada';
-    const dateText = text($, article, '.date') || text($, article, 'li.date');
-    const salary = text($, article, '.salary') || text($, article, 'li.salary');
+    const company = text($, article, 'li.business') || text($, article, '.business') || 'Employer not disclosed';
+    const location = text($, article, 'li.location') || text($, article, '.location') || 'Ontario, Canada';
+    const dateText = text($, article, 'li.date') || text($, article, '.date');
+    const salary = text($, article, 'li.salary') || text($, article, '.salary');
 
-    const snippetParts = [
-      text($, article, '.summary'),
-      text($, article, '.description'),
-      article.find('li').map((__, li) => $(li).text().replace(/\s+/g, ' ').trim()).get().join(' · '),
-    ].filter(Boolean);
+    const snippet = article
+      .find('li')
+      .map((__, li) => $(li).text().replace(/\s+/g, ' ').trim())
+      .get()
+      .filter(Boolean)
+      .join(' · ');
 
     out.push({
       sourceJobId: id,
@@ -93,32 +125,75 @@ function parseResults(html: string, queryLabel: string): RawJob[] {
       title,
       company: company.replace(/^Employer:\s*/i, '').trim(),
       locationRaw: location.replace(/^Location:\s*/i, '').trim(),
-      description: snippetParts.join('\n'),
+      description: snippet,
       descriptionIsHtml: false,
       postedAt: dateText.replace(/^Posted on\s*/i, '').trim() || null,
       salaryRaw: salary.replace(/^Salary:\s*/i, '').trim() || null,
-      remoteHint: /remote|t[eé]l[eé]travail/i.test(`${title} ${location} ${snippetParts.join(' ')}`) || null,
-      extra: { query: queryLabel },
+      remoteHint: /remote|t[eé]l[eé]travail/i.test(`${title} ${location} ${snippet}`) || null,
     });
   });
 
   return out;
 }
 
-async function fetchDetail(url: string): Promise<{ html: string; posted: string | null } | null> {
-  try {
-    const html = await fetchText(url, { retries: 1, timeoutMs: 20_000 });
-    const $ = cheerio.load(html);
-    const body =
-      $('.job-posting-detail-requirements').html() ??
-      $('#job-posting-detail').html() ??
-      $('main').html() ??
-      '';
-    const posted = $('.date-posted, .job-posting-detail-posted').first().text().replace(/\s+/g, ' ').trim() || null;
-    return { html: body, posted };
-  } catch {
-    return null;
-  }
+/* ------------------------------------------------------------------ */
+/* Atom feed                                                           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Job Bank publishes the same search as an Atom feed. Each entry carries a
+ * title, link, updated timestamp and a summary of the form:
+ *
+ *   <strong>Job number:</strong> 3650182<br>
+ *   <strong>Location:</strong> Toronto (ON)<br>
+ *   <strong>Employer:</strong> Adisoft Inc<br>
+ *   <strong>Salary:</strong> $60.00 to $120.00 hourly
+ *
+ * This is structurally stable, so it is used as a fallback whenever the HTML
+ * parser comes back empty — if Job Bank restyles their results page the
+ * connector degrades to the feed instead of silently returning nothing.
+ */
+/** Exported for the pipeline self-test. */
+export function parseFeed(xml: string): RawJob[] {
+  const $ = cheerio.load(xml, { xmlMode: true });
+  const out: RawJob[] = [];
+
+  $('entry').each((_, el) => {
+    const entry = $(el);
+    const title = entry.find('title').first().text().trim();
+    const href = entry.find('link').first().attr('href') ?? entry.find('id').first().text().trim();
+    const idMatch = /\/jobposting\/(\d+)/.exec(href);
+    if (!title || !idMatch) return;
+
+    const summary = entry.find('summary').first().text();
+    const field = (label: string): string | null => {
+      const re = new RegExp(`<strong>\\s*${label}\\s*:?\\s*</strong>\\s*([^<]*)`, 'i');
+      const m = re.exec(summary);
+      return m?.[1]?.replace(/\s+/g, ' ').trim() || null;
+    };
+
+    const location = field('Location');
+    const employer = field('Employer');
+    const salary = field('Salary');
+
+    out.push({
+      sourceJobId: idMatch[1],
+      sourceId: 'jobbank',
+      sourceName: 'Job Bank (Government of Canada)',
+      sourceUrl: href.split('?')[0],
+      applyUrl: href.split('?')[0],
+      title,
+      company: employer || 'Employer not disclosed',
+      locationRaw: location && location !== 'Not Available' ? location : 'Ontario, Canada',
+      description: summary.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+      descriptionIsHtml: false,
+      postedAt: entry.find('updated').first().text().trim() || null,
+      salaryRaw: salary,
+      remoteHint: /remote|t[eé]l[eé]travail/i.test(`${title} ${location ?? ''}`) || null,
+    });
+  });
+
+  return out;
 }
 
 export const jobBankSource: JobSource = {
@@ -130,7 +205,7 @@ export const jobBankSource: JobSource = {
   isEnabled: () => config.jobbank.enabled,
   disabledReason: () => 'Set JOBBANK_ENABLED=true to include Job Bank.',
   async fetchJobs(ctx: SourceContext): Promise<RawJob[]> {
-    const probe = `${SEARCH}?searchstring=cyber+security&locationstring=Ontario`;
+    const probe = `${SEARCH}?searchstring=security&locationstring=Ontario`;
     const verdict = await isAllowed(probe, false);
     if (!verdict.allowed) {
       ctx.log(`jobbank: skipped — ${verdict.reason ?? 'robots.txt disallows'}`);
@@ -142,7 +217,9 @@ export const jobBankSource: JobSource = {
     ctx.log(`jobbank: crawling with ${delay}ms delay (robots.txt Crawl-delay honoured)`);
 
     const results: RawJob[] = [];
-    const queries = QUERIES.slice(0, Math.max(1, config.jobbank.maxQueries));
+    const queries = buildQueries().slice(0, Math.max(1, config.jobbank.maxQueries));
+    let htmlAttempts = 0;
+    let htmlHits = 0;
 
     for (const query of queries) {
       if (ctx.deadline.expired) {
@@ -151,35 +228,42 @@ export const jobBankSource: JobSource = {
       }
       for (let page = 1; page <= config.jobbank.maxPagesPerQuery; page += 1) {
         if (ctx.deadline.expired) break;
-        const url = `${SEARCH}?searchstring=${encodeURIComponent(query.search)}&locationstring=${encodeURIComponent(query.location)}&sort=M&page=${page}`;
+        const url =
+          `${SEARCH}?searchstring=${encodeURIComponent(query.token)}` +
+          `&locationstring=${encodeURIComponent(query.location)}&sort=M&page=${page}`;
         try {
+          htmlAttempts += 1;
           const html = await fetchText(url, { retries: 1, timeoutMs: 25_000 });
-          const parsed = parseResults(html, query.label);
+          const parsed = parseSearchHtml(html);
+          htmlHits += parsed.length;
           results.push(...parsed);
           if (parsed.length === 0) break;
         } catch (err) {
-          ctx.log(`jobbank "${query.label}" p${page}: ${err instanceof Error ? err.message : String(err)}`);
+          ctx.log(`jobbank "${query.token}/${query.location}" p${page}: ${err instanceof Error ? err.message : String(err)}`);
           break;
         }
       }
     }
 
-    const unique = dedupeRaw(results);
-
-    if (config.jobbank.fetchDetails && !ctx.deadline.expired) {
-      const targets = unique.slice(0, 25);
-      for (const job of targets) {
+    // Self-healing: if the results page yielded nothing across every attempt,
+    // the markup has probably changed. Fall back to the Atom feed.
+    if (htmlHits === 0 && htmlAttempts > 0 && !ctx.deadline.expired) {
+      ctx.log('jobbank: HTML search returned 0 rows — falling back to the Atom feed');
+      for (const query of queries) {
         if (ctx.deadline.expired) break;
-        const detail = await fetchDetail(job.sourceUrl);
-        if (detail?.html) {
-          job.description = detail.html;
-          job.descriptionIsHtml = true;
+        const params = new URLSearchParams({ searchstring: query.token, sort: 'M', rows: '100' });
+        if (query.province) params.set('fprov', query.province);
+        try {
+          const xml = await fetchText(`${FEED}?${params.toString()}`, { retries: 1, timeoutMs: 25_000 });
+          results.push(...parseFeed(xml));
+        } catch (err) {
+          ctx.log(`jobbank feed "${query.token}": ${err instanceof Error ? err.message : String(err)}`);
         }
-        if (detail?.posted) job.postedAt = detail.posted;
       }
     }
 
-    for (const j of unique) delete j.extra;
+    const unique = dedupeRaw(results);
+    ctx.log(`jobbank: ${unique.length} unique postings from ${htmlAttempts} requests`);
     return unique;
   },
 };

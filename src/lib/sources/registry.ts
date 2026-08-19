@@ -28,9 +28,21 @@ export const ALL_SOURCES: JobSource[] = [
   remotiveSource,
 ];
 
+function listFromEnv(name: string, fallback: string[]): string[] {
+  // Read the environment at call time, not at module-import time: the CLI sets
+  // INGEST_SOURCES from --only inside main(), which runs after config.ts has
+  // already been evaluated. Snapshotting here made --only silently a no-op.
+  const raw = process.env[name];
+  if (raw == null) return fallback;
+  return raw
+    .split(/[,\s]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export function activeSources(): JobSource[] {
-  const only = config.ingest.only.map((s) => s.toLowerCase());
-  const disabled = new Set(config.ingest.disabled.map((s) => s.toLowerCase()));
+  const only = listFromEnv('INGEST_SOURCES', config.ingest.only).map((s) => s.toLowerCase());
+  const disabled = new Set(listFromEnv('INGEST_DISABLED_SOURCES', config.ingest.disabled).map((s) => s.toLowerCase()));
   return ALL_SOURCES.filter((s) => {
     if (disabled.has(s.id)) return false;
     if (only.length > 0) return only.includes(s.id);

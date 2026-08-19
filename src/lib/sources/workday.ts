@@ -53,7 +53,13 @@ function postedOnToDate(value: string | undefined): string | null {
   return Number.isNaN(d) ? null : new Date(d).toISOString();
 }
 
-const SEARCH_TERMS = ['security', 'cyber', 'information security', 'risk', 'identity'];
+/**
+ * Kept deliberately short. Workday tenants are slow (one POST per page, per
+ * term, per tenant) and in the first live run this source alone consumed 231s
+ * of a 300s budget. The per-source deadline now caps it, but fewer terms means
+ * the cap is less likely to truncate a tenant mid-way.
+ */
+const SEARCH_TERMS = ['security', 'cyber', 'risk'];
 
 export const workdaySource: JobSource = {
   id: 'workday',
@@ -83,7 +89,7 @@ export const workdaySource: JobSource = {
 
       for (const term of SEARCH_TERMS) {
         if (ctx.deadline.expired) break;
-        for (let offset = 0; offset < 60; offset += 20) {
+        for (let offset = 0; offset < 40; offset += 20) {
           if (ctx.deadline.expired) break;
           let page: WorkdaySearchResponse;
           try {
@@ -137,7 +143,7 @@ export const workdaySource: JobSource = {
     const interesting = results.filter((r) =>
       CYBER_QUERY_TERMS.some((term) => r.title.toLowerCase().includes(term.split(' ')[0])),
     );
-    const targets = interesting.slice(0, 150);
+    const targets = interesting.slice(0, 60);
 
     await mapLimit(targets, 3, async (job) => {
       if (ctx.deadline.expired) return;
