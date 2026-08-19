@@ -243,9 +243,22 @@ export const jobBankSource: JobSource = {
     let feedHits = 0;
     let requests = 0;
     let covered = 0;
+    let consecutiveFailures = 0;
+    let anySuccess = false;
 
     for (const query of queries) {
       if (ctx.deadline.expired) break;
+
+      // Circuit breaker. Job Bank blocks some source IPs outright — from GitHub
+      // Actions runners every request now answers 503. Without this the source
+      // spends its entire 90s budget collecting nothing, which is time the other
+      // connectors could have used. Six failures with no success means this
+      // vantage point is blocked; stop rather than keep paying the crawl delay.
+      if (!anySuccess && consecutiveFailures >= 6) {
+        ctx.log('jobbank: aborting — 6 consecutive failures with no success, this IP looks blocked');
+        break;
+      }
+
       covered += 1;
 
       let got = 0;
@@ -258,7 +271,10 @@ export const jobBankSource: JobSource = {
         got = parsed.length;
         htmlHits += got;
         results.push(...parsed);
+        anySuccess = true;
+        consecutiveFailures = 0;
       } catch (err) {
+        consecutiveFailures += 1;
         ctx.log(`jobbank html "${query.token}": ${err instanceof Error ? err.message : String(err)}`);
       }
 
@@ -271,7 +287,10 @@ export const jobBankSource: JobSource = {
         const parsed = parseFeed(await fetchText(`${FEED}?${params.toString()}`, { retries: 0, timeoutMs: 20_000 }));
         feedHits += parsed.length;
         results.push(...parsed);
+        anySuccess = true;
+        consecutiveFailures = 0;
       } catch (err) {
+        consecutiveFailures += 1;
         ctx.log(`jobbank feed "${query.token}": ${err instanceof Error ? err.message : String(err)}`);
       }
     }
