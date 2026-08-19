@@ -213,63 +213,74 @@ export const jobBankSource: JobSource = {
 
     const delay = Math.max(config.jobbank.crawlDelayMs, verdict.crawlDelayMs ?? 0);
     setHostDelay(HOST, delay);
-    ctx.log(`jobbank: crawling with ${delay}ms delay (robots.txt Crawl-delay honoured)`);
+
+    // Job Bank is the slowest source by a wide margin: every request costs the
+    // five-second crawl delay, and the site intermittently answers 503 under
+    // sustained access (observed consistently from CI runners). Requests, not
+    // postings, are the scarce resource here — so:
+    //
+    //   * retries are off. A retry costs another full crawl delay plus backoff
+    //     for a request that is being throttled anyway; spending that on the
+    //     next token yields more.
+    //   * the token list is rotated by the hour, so consecutive scheduled runs
+    //     start at different keywords. A single run only gets through part of
+    //     the list, but the store accumulates across runs, so over a day the
+    //     whole list is covered.
+    //   * per token we try the results page first (~25 rows/request against the
+    //     feed's ~14) and fall back to the feed only for tokens where the page
+    //     yielded nothing. That way a failure costs one extra request instead
+    //     of leaving the token uncovered.
+    const all = buildQueries();
+    const offset = new Date().getUTCHours() % all.length;
+    const queries = [...all.slice(offset), ...all.slice(0, offset)].slice(
+      0,
+      Math.max(1, config.jobbank.maxQueries),
+    );
+    ctx.log(`jobbank: ${delay}ms delay (robots.txt Crawl-delay honoured), starting at token "${queries[0]?.token}"`);
 
     const results: RawJob[] = [];
-    const queries = buildQueries().slice(0, Math.max(1, config.jobbank.maxQueries));
-
-    // ---- Pass 1: the Atom feed -------------------------------------
-    //
-    // Feed first, deliberately. Every request to this host costs the full
-    // five-second crawl delay, and one feed request returns up to 100 entries
-    // against 25 for a results page — so the feed buys far more coverage per
-    // second of budget. It is also structured, where the results page is
-    // markup that can be restyled at any time.
-    //
-    // This used to run only as a fallback *after* the HTML pass, and the
-    // guard included `!ctx.deadline.expired`. Since the HTML pass always
-    // consumed the whole budget, the fallback never fired: one run returned
-    // 100 postings and the next returned zero, purely on timing.
-    let feedRequests = 0;
-    for (const query of queries) {
-      if (ctx.deadline.expired) break;
-      const params = new URLSearchParams({ searchstring: query.token, sort: 'M', rows: '100' });
-      if (query.province) params.set('fprov', query.province);
-      try {
-        feedRequests += 1;
-        results.push(...parseFeed(await fetchText(`${FEED}?${params.toString()}`, { retries: 1, timeoutMs: 25_000 })));
-      } catch (err) {
-        ctx.log(`jobbank feed "${query.token}": ${err instanceof Error ? err.message : String(err)}`);
-      }
-    }
-    const fromFeed = dedupeRaw(results).length;
-    ctx.log(`jobbank: ${fromFeed} postings from ${feedRequests} feed requests`);
-
-    // ---- Pass 2: the results page, only if budget remains ----------
-    //
-    // The HTML page surfaces some postings the feed omits, so it is worth
-    // running when there is time left. It is strictly a bonus: if it returns
-    // nothing, or never runs, pass 1 has already delivered.
-    let htmlRequests = 0;
     let htmlHits = 0;
+    let feedHits = 0;
+    let requests = 0;
+    let covered = 0;
+
     for (const query of queries) {
       if (ctx.deadline.expired) break;
+      covered += 1;
+
+      let got = 0;
       const url =
         `${SEARCH}?searchstring=${encodeURIComponent(query.token)}` +
         `&locationstring=${encodeURIComponent(query.location)}&sort=M&page=1`;
       try {
-        htmlRequests += 1;
-        const parsed = parseSearchHtml(await fetchText(url, { retries: 1, timeoutMs: 25_000 }));
-        htmlHits += parsed.length;
+        requests += 1;
+        const parsed = parseSearchHtml(await fetchText(url, { retries: 0, timeoutMs: 20_000 }));
+        got = parsed.length;
+        htmlHits += got;
         results.push(...parsed);
       } catch (err) {
         ctx.log(`jobbank html "${query.token}": ${err instanceof Error ? err.message : String(err)}`);
       }
+
+      if (got > 0 || ctx.deadline.expired) continue;
+
+      const params = new URLSearchParams({ searchstring: query.token, sort: 'M', rows: '100' });
+      if (query.province) params.set('fprov', query.province);
+      try {
+        requests += 1;
+        const parsed = parseFeed(await fetchText(`${FEED}?${params.toString()}`, { retries: 0, timeoutMs: 20_000 }));
+        feedHits += parsed.length;
+        results.push(...parsed);
+      } catch (err) {
+        ctx.log(`jobbank feed "${query.token}": ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
-    if (htmlRequests > 0) ctx.log(`jobbank: ${htmlHits} more from ${htmlRequests} results-page requests`);
 
     const unique = dedupeRaw(results);
-    ctx.log(`jobbank: ${unique.length} unique postings total`);
+    ctx.log(
+      `jobbank: ${unique.length} unique from ${requests} requests across ${covered}/${all.length} tokens ` +
+        `(${htmlHits} via results page, ${feedHits} via Atom feed)`,
+    );
     return unique;
   },
 };
