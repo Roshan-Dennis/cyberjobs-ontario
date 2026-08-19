@@ -44,6 +44,12 @@ export const config = {
   ingest: {
     /** Hard ceiling on wall-clock time for one ingestion run (serverless limits). */
     maxDurationMs: num(process.env.INGEST_MAX_DURATION_MS, 240_000),
+    /**
+     * Ceiling for any single source. Without this one slow source starves the
+     * rest — in the first live run Workday consumed 231s of a 300s budget and
+     * Arbeitnow never ran at all.
+     */
+    maxSourceDurationMs: num(process.env.INGEST_MAX_SOURCE_MS, 90_000),
     concurrency: num(process.env.INGEST_CONCURRENCY, 4),
     minRelevance: num(process.env.INGEST_MIN_RELEVANCE, 25),
     includePathway: bool(process.env.INGEST_INCLUDE_PATHWAY, true),
@@ -67,7 +73,7 @@ export const config = {
     /** Job Bank's robots.txt asks for Crawl-delay: 5. Do not lower this. */
     crawlDelayMs: Math.max(5000, num(process.env.JOBBANK_CRAWL_DELAY_MS, 5000)),
     maxPagesPerQuery: num(process.env.JOBBANK_MAX_PAGES, 2),
-    maxQueries: num(process.env.JOBBANK_MAX_QUERIES, 8),
+    maxQueries: num(process.env.JOBBANK_MAX_QUERIES, 16),
     fetchDetails: bool(process.env.JOBBANK_FETCH_DETAILS, false),
   },
 

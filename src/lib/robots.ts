@@ -97,12 +97,17 @@ async function loadRobots(origin: string): Promise<RobotsDoc> {
       cache: 'no-store',
     });
     clearTimeout(timer);
-    if (res.status === 404 || res.status === 410) {
-      // No robots.txt means everything is allowed.
+    // A 4xx that is not an auth/rate-limit response means the origin serves no
+    // robots.txt, which under RFC 9309 means "no restrictions". Several Workday
+    // tenants answer 422 here; treating that as a refusal silently dropped nine
+    // of them from the first live run.
+    const noRobotsFile = res.status >= 400 && res.status < 500 && ![401, 403, 429].includes(res.status);
+    if (noRobotsFile) {
       CACHE.set(origin, doc);
       return doc;
     }
     if (!res.ok) {
+      // 401/403/429 or a 5xx: we genuinely do not know the rules.
       doc.error = `robots.txt HTTP ${res.status}`;
       CACHE.set(origin, doc);
       return doc;
