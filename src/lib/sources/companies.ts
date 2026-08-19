@@ -269,23 +269,30 @@ export interface WorkdayEntry {
 }
 
 export const WORKDAY_TENANTS: WorkdayEntry[] = [
+  // Verified against each tenant's own robots.txt sitemap, which lists the real
+  // site slug. Guessed slugs answer HTTP 422 and yield nothing — the first two
+  // live runs wasted nine entries that way.
   { label: 'RBC (Early Talent)', host: 'rbc.wd3.myworkdayjobs.com', tenant: 'rbc', site: 'RBCEARLYTALENT1', hint: 'Toronto' },
-  { label: 'Scotiabank', host: 'scotiabank.wd3.myworkdayjobs.com', tenant: 'scotiabank', site: 'Scotiabank_Careers', hint: 'Toronto' },
   { label: 'CIBC', host: 'cibc.wd3.myworkdayjobs.com', tenant: 'cibc', site: 'search', hint: 'Toronto' },
   { label: 'BMO', host: 'bmo.wd3.myworkdayjobs.com', tenant: 'bmo', site: 'External', hint: 'Toronto' },
   { label: 'Manulife', host: 'manulife.wd3.myworkdayjobs.com', tenant: 'manulife', site: 'MFCJH_Jobs', hint: 'Toronto/Waterloo' },
   { label: 'Sun Life', host: 'sunlife.wd3.myworkdayjobs.com', tenant: 'sunlife', site: 'Experienced-Jobs', hint: 'Toronto/Waterloo' },
-  { label: 'Loblaw', host: 'loblaw.wd3.myworkdayjobs.com', tenant: 'loblaw', site: 'LCLCareers', hint: 'Brampton' },
-  { label: 'Canadian Tire', host: 'canadiantire.wd3.myworkdayjobs.com', tenant: 'canadiantire', site: 'CanadianTireCareers', hint: 'Toronto' },
-  { label: 'OpenText', host: 'opentext.wd3.myworkdayjobs.com', tenant: 'opentext', site: 'External', hint: 'Waterloo' },
   { label: 'Thomson Reuters', host: 'thomsonreuters.wd5.myworkdayjobs.com', tenant: 'thomsonreuters', site: 'External_Career_Site', hint: 'Toronto' },
-  { label: 'Definity Insurance', host: 'definity.wd3.myworkdayjobs.com', tenant: 'definity', site: 'Careers', hint: 'Waterloo' },
   { label: 'Aviva Canada', host: 'aviva.wd1.myworkdayjobs.com', tenant: 'aviva', site: 'External', hint: 'Markham' },
   { label: 'OMERS', host: 'omers.wd3.myworkdayjobs.com', tenant: 'omers', site: 'OMERS_Careers', hint: 'Toronto' },
-  { label: 'Ontario Teachers Pension Plan', host: 'otpp.wd3.myworkdayjobs.com', tenant: 'otpp', site: 'OTPP_Careers', hint: 'Toronto' },
-  { label: 'University Health Network', host: 'uhn.wd3.myworkdayjobs.com', tenant: 'uhn', site: 'UHN_Careers', hint: 'Toronto' },
-  { label: 'Air Canada', host: 'aircanada.wd3.myworkdayjobs.com', tenant: 'aircanada', site: 'Air_Canada_Careers', hint: 'Toronto' },
-  { label: 'CPP Investments', host: 'cppib.wd3.myworkdayjobs.com', tenant: 'cppib', site: 'CPPIB_Careers', hint: 'Toronto' },
+
+  { label: 'Loblaw', host: 'myview.wd3.myworkdayjobs.com', tenant: 'myview', site: 'loblaw_careers', hint: 'Brampton' },
+  { label: 'Shoppers Drug Mart', host: 'myview.wd3.myworkdayjobs.com', tenant: 'myview', site: 'sdm_careers', hint: 'Toronto' },
+  { label: 'Loblaw Digital', host: 'myview.wd3.myworkdayjobs.com', tenant: 'myview', site: 'Loblaw-Digital_Careers_Carrieres', hint: 'Toronto' },
+  { label: 'Canadian Tire', host: 'canadiantirecorporation.wd3.myworkdayjobs.com', tenant: 'canadiantirecorporation', site: 'Enterprise_External_Careers_Site', hint: 'Toronto' },
+  { label: 'Ontario Teachers Pension Plan', host: 'otppb.wd3.myworkdayjobs.com', tenant: 'otppb', site: 'OntarioTeachers_Careers', hint: 'Toronto' },
+  { label: 'Ontario Health', host: 'oh.wd3.myworkdayjobs.com', tenant: 'oh', site: 'OH', hint: 'Ontario-wide' },
+  { label: 'Scarborough Health Network', host: 'shn.wd10.myworkdayjobs.com', tenant: 'shn', site: 'SHN_External_Career_Site', hint: 'Toronto' },
+
+  // Removed after verification — these employers are not on Workday:
+  //   Scotiabank  -> SuccessFactors (jobs.scotiabank.com)
+  //   Air Canada  -> Taleo (aircanada.taleo.net)
+  //   OpenText, Definity, UHN, CPP Investments -> no public Workday tenant found
 ];
 
 export function boardsWithExtras(base: BoardEntry[], extras: string[]): BoardEntry[] {
