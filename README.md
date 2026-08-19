@@ -227,9 +227,11 @@ Every variable is documented inline in [`.env.example`](.env.example). The ones 
 | `INGEST_ALLOW_REMOTE_CANADA` | `true` | Include remote roles open across Canada, not just Ontario. |
 | `INGEST_EXPIRY_DAYS` | `60` | Age at which a posting is marked likely expired. |
 | `INGEST_MAX_DURATION_MS` | `240000` | Wall-clock budget per run. Keep below your function timeout. |
+| `INGEST_MAX_SOURCE_MS` | `90000` | Ceiling for any one source, so a slow source cannot starve the rest. |
 | `INGEST_SOURCES` | *(all)* | Allow-list, e.g. `greenhouse,lever,jobbank`. |
 | `INGEST_DISABLED_SOURCES` | *(none)* | Deny-list. |
 | `JOBBANK_CRAWL_DELAY_MS` | `5000` | Honours Job Bank's stated `Crawl-delay`. **Do not lower.** |
+| `JOBBANK_MAX_QUERIES` | `16` | Number of single-word keyword queries per run. |
 | `JOBBANK_FETCH_DETAILS` | `false` | Fetch full descriptions (costs 5s each). |
 | `SEARCH_CACHE_TTL` | `60` | Seconds the API may serve a memoised result set. |
 
