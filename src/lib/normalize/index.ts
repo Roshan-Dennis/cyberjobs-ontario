@@ -1,4 +1,4 @@
-import { decodeEscapedHtml, htmlToText, sanitizeHtml, summarize } from '@/lib/normalize/html';
+import { htmlToText, sanitizeHtml, summarize } from '@/lib/normalize/html';
 import { toIso } from '@/lib/normalize/dates';
 import { findSalaryInText, parseSalary } from '@/lib/normalize/salary';
 import { extractRequirements, buildKeywords } from '@/lib/normalize/extract';
@@ -39,13 +39,8 @@ export function normalizeJob(raw: RawJob, opts: NormalizeOptions = DEFAULT_NORMA
   if (!titleRaw) return { job: null, reason: 'missing title' };
   const company = (raw.company ?? '').trim() || 'Unknown employer';
 
-  // Decode before parsing, not after. Greenhouse serves its `content` field
-  // entity-encoded; without this the tag-stripper finds nothing to strip and the
-  // entity-decoder then leaves literal <p> tags in the summary. Handled here
-  // rather than per-connector so any source doing the same is covered.
-  const rawDescription = raw.descriptionIsHtml ? decodeEscapedHtml(raw.description ?? '') : (raw.description ?? '');
-  const descriptionHtml = raw.descriptionIsHtml ? sanitizeHtml(rawDescription) : null;
-  const description = raw.descriptionIsHtml ? htmlToText(rawDescription) : rawDescription.trim();
+  const descriptionHtml = raw.descriptionIsHtml ? sanitizeHtml(raw.description ?? '') : null;
+  const description = raw.descriptionIsHtml ? htmlToText(raw.description ?? '') : (raw.description ?? '').trim();
 
   const cls = classify(titleRaw, description, raw.departmentRaw ?? '');
   if (cls.rejected) return { job: null, reason: cls.rejectReason };

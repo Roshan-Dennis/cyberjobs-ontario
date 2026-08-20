@@ -58,7 +58,10 @@ export function SearchBar({
         className="flex gap-2"
         role="search"
       >
-        <div className="relative flex-1">
+        <div className="input input-search relative flex flex-1 items-center gap-2 p-0 pl-3">
+          <span aria-hidden className="pointer-events-none text-base leading-none text-muted">
+            ⌕
+          </span>
           <input
             type="search"
             value={text}
@@ -66,11 +69,8 @@ export function SearchBar({
             onFocus={() => setFocused(true)}
             placeholder='Search titles, companies, skills — try "SOC analyst" or splunk -senior'
             aria-label="Search cybersecurity jobs"
-            className="input py-2.5 pl-9"
+            className="w-full bg-transparent py-2.5 pr-3 text-sm text-ink outline-none placeholder:text-muted"
           />
-          <span aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted">
-            ⌕
-          </span>
         </div>
         <button type="submit" className="btn btn-primary px-5">
           Search
@@ -123,7 +123,7 @@ export function SearchBar({
               <button
                 key={s}
                 type="button"
-                className="chip hover:border-brand hover:text-brand"
+                className="tag-button"
                 onClick={() => {
                   setText(s);
                   setFocused(false);

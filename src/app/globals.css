@@ -11,6 +11,9 @@
   --muted: 100 116 139;
   --brand: 13 110 253;
   --brand-ink: 255 255 255;
+  /* Cyan accent: identity and focus, distinct from the blue action colour so a
+     highlighted element never reads as a button. */
+  --accent: 8 145 178;
   --good: 5 150 105;
   --warn: 217 119 6;
 }
@@ -19,11 +22,12 @@
   --bg: 8 12 20;
   --surface: 17 24 39;
   --surface2: 26 34 48;
-  --line: 45 55 72;
+  --line: 42 47 61; /* #2A2F3D */
   --ink: 226 232 240;
   --muted: 148 163 184;
   --brand: 96 165 250;
   --brand-ink: 8 12 20;
+  --accent: 34 211 238;
   --good: 52 211 153;
   --warn: 251 191 36;
 }
@@ -53,26 +57,79 @@ body {
     @apply rounded-xl border border-line bg-surface shadow-card;
   }
 
+  /* Job cards rise slightly toward the pointer. Border and shadow shift
+     together so the lift reads as depth rather than a colour change. */
+  .card-interactive {
+    @apply card transition-all duration-200 ease-out;
+    @apply hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-lift;
+  }
+
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line px-3 py-2 text-sm font-medium transition-colors;
-    @apply hover:bg-surface2 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2;
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-sm font-medium text-ink transition-all duration-150;
+    @apply hover:border-muted/50 hover:bg-surface2 hover:text-ink;
+    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[rgb(var(--bg))];
+    @apply disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-surface disabled:hover:border-line;
   }
 
   .btn-primary {
-    @apply border-transparent bg-brand text-brandInk hover:opacity-90;
+    @apply border-transparent bg-brand text-brandInk hover:bg-brand hover:opacity-90;
   }
 
+  .btn-ghost {
+    @apply border-transparent bg-transparent hover:bg-surface2;
+  }
+
+  /* Two tag families, deliberately different shapes.
+     Solid = a fact about the job (where, what level, what kind).
+     Outline = a requirement listed in the posting (skill, tool, cert). */
+  .badge {
+    @apply inline-flex items-center gap-1 rounded-md border border-transparent bg-surface2 px-2 py-0.5 text-xs font-medium text-ink;
+  }
+
+  .badge-remote {
+    @apply bg-good/15 text-good;
+  }
+
+  .badge-hybrid {
+    @apply bg-brand/15 text-brand;
+  }
+
+  .badge-alert {
+    @apply bg-warn/15 text-warn;
+  }
+
+  .tag {
+    @apply inline-flex items-center gap-1 rounded-full border border-line bg-transparent px-2.5 py-0.5 text-xs font-medium text-muted transition-colors;
+  }
+
+  .tag-button {
+    @apply tag hover:border-accent hover:text-accent;
+  }
+
+  .tag-cert {
+    @apply tag border-accent/40 text-accent;
+  }
+
+  /* Filter chips (date range, toggles) stay pill-shaped and can be selected. */
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full border border-line bg-surface2 px-2.5 py-1 text-xs font-medium text-muted;
+    @apply inline-flex items-center gap-1 rounded-full border border-line bg-surface2 px-2.5 py-1 text-xs font-medium text-muted transition-colors;
+    @apply hover:border-muted/50 hover:text-ink;
   }
 
   .chip-active {
-    @apply border-brand bg-brand text-brandInk;
+    @apply border-transparent bg-brand text-brandInk hover:text-brandInk;
   }
 
   .input {
     @apply w-full rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink placeholder:text-muted;
-    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-brand;
+    @apply transition-shadow focus:outline-none focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/40;
+  }
+
+  /* The one control the page is built around gets a soft glow rather than a
+     hard ring, so it reads as "active" instead of "validated". */
+  .input-search:focus-within {
+    @apply border-accent;
+    box-shadow: 0 0 0 4px rgb(var(--accent) / 0.14);
   }
 
   .label {
@@ -81,6 +138,28 @@ body {
 
   .link {
     @apply text-brand underline-offset-2 hover:underline;
+  }
+
+  /* Native date inputs render a light-mode calendar glyph on dark backgrounds.
+     `color-scheme` fixes the popup; the filter fixes the icon itself. */
+  /* The sidebar column is ~118px wide; the default input padding clips
+     "mm/dd/yyyy" and the picker glyph, so date fields run tighter. */
+  .input[type='date'] {
+    @apply cursor-pointer px-2 py-1.5 text-xs;
+  }
+  .input[type='date']::-webkit-calendar-picker-indicator {
+    @apply ml-0 shrink-0;
+  }
+  .dark .input[type='date'] {
+    color-scheme: dark;
+  }
+  .dark .input[type='date']::-webkit-calendar-picker-indicator {
+    filter: invert(0.85);
+    opacity: 0.6;
+    cursor: pointer;
+  }
+  .dark .input[type='date']::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
   }
 }
 
@@ -111,6 +190,19 @@ body {
 }
 .prose-job table {
   @apply mb-3 w-full text-left text-xs;
+}
+
+/* Company avatar placeholder: initials on a tinted disc, hue derived from the
+   employer name so the same company always looks the same. */
+.avatar {
+  @apply grid h-10 w-10 shrink-0 place-items-center rounded-xl text-xs font-bold uppercase tracking-tight;
+  @apply ring-1 ring-inset ring-line;
+  background-color: rgb(var(--a-bg) / 0.14);
+  color: rgb(var(--a-fg));
+}
+.dark .avatar {
+  background-color: rgb(var(--a-bg) / 0.16);
+  color: rgb(var(--a-fg-dark));
 }
 
 ::-webkit-scrollbar {

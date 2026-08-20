@@ -54,27 +54,32 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen">
         <header className="sticky top-0 z-40 border-b border-line bg-surface/85 backdrop-blur">
           <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3">
-            <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
+            <Link href="/" className="group flex items-center gap-2.5 font-semibold tracking-tight">
+              {/* Cyan mark, ink wordmark: the accent identifies the product
+                  without competing with the blue used for actions. */}
               <span
                 aria-hidden
-                className="grid h-8 w-8 place-items-center rounded-lg bg-brand text-sm font-bold text-brandInk"
+                className="grid h-8 w-8 place-items-center rounded-lg bg-accent/15 text-sm font-bold text-accent ring-1 ring-inset ring-accent/30 transition-colors group-hover:bg-accent/25"
               >
                 CJ
               </span>
-              <span className="hidden sm:inline">{config.appName}</span>
+              <span className="hidden sm:inline">
+                Cyber<span className="text-accent">Jobs</span>
+                <span className="ml-1 font-normal text-muted">Ontario</span>
+              </span>
             </Link>
 
             <nav className="ml-auto flex items-center gap-1 text-sm">
-              <Link href="/" className="btn border-transparent">
+              <Link href="/" className="btn btn-ghost">
                 Jobs
               </Link>
-              <Link href="/dashboard" className="btn border-transparent">
+              <Link href="/dashboard" className="btn btn-ghost">
                 Dashboard
               </Link>
-              <Link href="/saved" className="btn border-transparent">
+              <Link href="/saved" className="btn btn-ghost">
                 Saved
               </Link>
-              <Link href="/about" className="btn border-transparent hidden md:inline-flex">
+              <Link href="/about" className="btn btn-ghost hidden md:inline-flex">
                 Sources
               </Link>
               <ThemeToggle />

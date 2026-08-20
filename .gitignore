@@ -17,5 +17,6 @@ data/*.json
 !data/.gitkeep
 
 data/jobs.full.json
+public/data/jobs.full.json
 public/data/jobs.json
 out/

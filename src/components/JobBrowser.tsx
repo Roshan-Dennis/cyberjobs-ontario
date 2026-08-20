@@ -136,10 +136,10 @@ export function JobBrowser() {
   return (
     <div className="space-y-4">
       <section className="card p-4">
-        <h1 className="text-lg font-semibold">Cybersecurity jobs across Ontario &amp; remote Canada</h1>
-        <p className="mt-0.5 text-sm text-muted">
-          Live postings pulled from company career-site APIs, the federal Job Bank and licensed job APIs — deduplicated,
-          categorised and ranked.
+        <h1 className="text-lg font-semibold tracking-tight">Cybersecurity jobs across Ontario &amp; remote Canada</h1>
+        <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted/80">
+          Postings collected hourly from company career-site APIs, the federal Job Bank and licensed job APIs —
+          deduplicated, categorised and ranked.
         </p>
         <div className="mt-3">
           <SearchBar
@@ -151,14 +151,16 @@ export function JobBrowser() {
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
           {lastUpdated ? <span>Last refreshed {lastUpdated}</span> : <span>Waiting for the first data refresh…</span>}
           {data?.meta.notes.map((n) => (
-            <span key={n} className="chip border-warn/40 bg-warn/10 text-warn">
+            <span key={n} className="badge badge-alert">
               {n}
             </span>
           ))}
         </div>
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+      {/* items-start keeps both columns anchored to the same top edge, so the
+          filter card and the results toolbar line up across the gutter. */}
+      <div className="grid items-start gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div className={`${showFilters ? 'block' : 'hidden'} lg:block`}>
           <FilterPanel
             filters={filters}
@@ -170,13 +172,19 @@ export function JobBrowser() {
         </div>
 
         <div className="min-w-0 space-y-4">
-          <div className="card flex flex-wrap items-center gap-2 p-3">
+          <div className="card flex min-h-[3.25rem] flex-wrap items-center gap-2 px-3 py-2.5">
             <button type="button" className="btn lg:hidden" onClick={() => setShowFilters((s) => !s)}>
               {showFilters ? 'Hide filters' : 'Filters'}
             </button>
 
-            <span className="text-sm text-muted">
-              {loading && !data ? 'Searching…' : `${(data?.total ?? 0).toLocaleString('en-CA')} jobs`}
+            <span className="text-sm font-medium">
+              {loading && !data ? (
+                <span className="text-muted">Loading…</span>
+              ) : (
+                <>
+                  {(data?.total ?? 0).toLocaleString('en-CA')} <span className="font-normal text-muted">jobs</span>
+                </>
+              )}
             </span>
 
             <div className="ml-auto flex flex-wrap items-center gap-2">

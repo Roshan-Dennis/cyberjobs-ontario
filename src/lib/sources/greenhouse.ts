@@ -57,7 +57,6 @@ export const greenhouseSource: JobSource = {
             title: job.title,
             company: job.company_name || board.label,
             locationRaw: location,
-            // Greenhouse serves `content` entity-encoded; normalizeJob decodes it.
             description: job.content ?? '',
             descriptionIsHtml: true,
             postedAt: job.first_published ?? job.updated_at ?? null,

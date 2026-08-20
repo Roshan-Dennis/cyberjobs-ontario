@@ -36,25 +36,6 @@ export function decodeEntities(input: string): string {
   return out;
 }
 
-/**
- * Some sources return their HTML entity-encoded — Greenhouse's `content` field
- * arrives as `&lt;p&gt;Text&lt;/p&gt;` rather than `<p>Text</p>`. Left alone, the
- * tag-stripper finds no tags to strip and the entity-decoder then turns the
- * escaped tags into literal `<p>` text in the summary. This decodes one layer
- * when the payload is clearly escaped markup, so the rest of the pipeline sees
- * real HTML.
- *
- * Detection is conservative: it only fires when escaped tags outnumber real
- * ones, so genuinely-HTML input containing an odd `&lt;` is left untouched.
- */
-export function decodeEscapedHtml(input: string): string {
-  if (!input) return input;
-  const escaped = (input.match(/&lt;\/?[a-zA-Z]/g) ?? []).length;
-  if (escaped === 0) return input;
-  const real = (input.match(/<\/?[a-zA-Z]/g) ?? []).length;
-  return escaped > real ? decodeEntities(input) : input;
-}
-
 /** Convert an HTML description to readable plain text with preserved line breaks. */
 export function htmlToText(html: string): string {
   if (!html) return '';

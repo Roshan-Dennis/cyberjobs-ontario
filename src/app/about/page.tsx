@@ -69,7 +69,7 @@ export default function AboutPage() {
                 <a href={s.homepage} target="_blank" rel="noopener noreferrer" className="font-medium link">
                   {s.name}
                 </a>
-                <span className={`chip ${s.isEnabled() ? 'border-good/40 bg-good/10 text-good' : ''}`}>
+                <span className={`badge ${s.isEnabled() ? 'bg-good/15 text-good' : 'text-muted'}`}>
                   {s.isEnabled() ? 'Enabled' : 'Not configured'}
                 </span>
               </div>

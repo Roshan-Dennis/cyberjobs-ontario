@@ -14,6 +14,7 @@ export default {
         muted: 'rgb(var(--muted) / <alpha-value>)',
         brand: 'rgb(var(--brand) / <alpha-value>)',
         brandInk: 'rgb(var(--brand-ink) / <alpha-value>)',
+        accent: 'rgb(var(--accent) / <alpha-value>)',
         good: 'rgb(var(--good) / <alpha-value>)',
         warn: 'rgb(var(--warn) / <alpha-value>)',
       },
@@ -23,6 +24,7 @@ export default {
       },
       boxShadow: {
         card: '0 1px 2px rgb(0 0 0 / 0.04), 0 4px 16px -8px rgb(0 0 0 / 0.10)',
+        lift: '0 4px 6px -2px rgb(0 0 0 / 0.06), 0 12px 28px -8px rgb(0 0 0 / 0.18)',
       },
     },
   },

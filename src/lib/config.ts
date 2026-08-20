@@ -55,6 +55,16 @@ export const config = {
     allowRemoteCanada: bool(process.env.INGEST_ALLOW_REMOTE_CANADA, true),
     /** Postings older than this are marked expired. */
     expiryDays: num(process.env.INGEST_EXPIRY_DAYS, 60),
+    /**
+     * Carry-forward window. A posting stays on the site this many days after
+     * the last time any source returned it, which is what makes one bad
+     * connector run invisible to visitors.
+     */
+    retentionDays: num(process.env.INGEST_RETENTION_DAYS, 21),
+    /** Grey out a carried-forward posting once unseen for this many days. */
+    staleDays: num(process.env.INGEST_STALE_DAYS, 3),
+    /** Where to read the previous publish from. Empty disables carry-forward. */
+    previousSnapshotUrl: process.env.PREVIOUS_SNAPSHOT_URL ?? '',
     /** Only these sources run, when set. */
     only: list(process.env.INGEST_SOURCES),
     disabled: list(process.env.INGEST_DISABLED_SOURCES),

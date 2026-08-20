@@ -52,6 +52,10 @@ jobs:
       - name: Collect job data
         run: npm run data -- --budget 900000 ${{ github.event.inputs.only && format('--only {0}', github.event.inputs.only) || '' }}
         env:
+          # Carry-forward baseline: the previous publish IS the database. If this
+          # 404s (first run) or times out, the build falls back to publishing
+          # only what was just collected.
+          PREVIOUS_SNAPSHOT_URL: ${{ vars.SITE_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}/data/jobs.full.json
           # Optional connectors — the site works without them.
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}

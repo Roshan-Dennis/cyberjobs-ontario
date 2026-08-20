@@ -19,6 +19,7 @@ export interface Snapshot {
 let cache: Snapshot | null = null;
 
 const CANDIDATES = [
+  path.join(process.cwd(), 'public', 'data', 'jobs.full.json'),
   path.join(process.cwd(), 'data', 'jobs.full.json'),
   path.join(process.cwd(), 'public', 'data', 'jobs.json'),
   path.join(process.cwd(), 'data', 'jobs.json'),

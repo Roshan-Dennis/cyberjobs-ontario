@@ -33,24 +33,27 @@ function Section({
   count?: number;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  // Each filter group is its own bordered card. Grouping by outline rather than
+  // by divider line means a long sidebar still parses as discrete choices
+  // instead of one continuous wall of checkboxes.
   return (
-    <div className="border-b border-line py-3 last:border-0">
+    <section className="rounded-lg border border-line bg-surface">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between text-left"
+        className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-surface2"
         aria-expanded={open}
       >
         <span className="label">
           {title}
-          {count ? <span className="ml-1 normal-case text-brand">({count})</span> : null}
+          {count ? <span className="ml-1 normal-case text-accent">({count})</span> : null}
         </span>
-        <span aria-hidden className="text-muted">
+        <span aria-hidden className="text-sm leading-none text-muted">
           {open ? '−' : '+'}
         </span>
       </button>
-      {open ? <div className="mt-2.5 space-y-1.5">{children}</div> : null}
-    </div>
+      {open ? <div className="space-y-1.5 border-t border-line px-3 py-3">{children}</div> : null}
+    </section>
   );
 }
 
@@ -77,7 +80,7 @@ function CheckList({
         <label key={f.value} className="flex cursor-pointer items-center gap-2 text-sm">
           <input
             type="checkbox"
-            className="h-4 w-4 shrink-0 rounded border-line accent-[rgb(var(--brand))]"
+            className="h-4 w-4 shrink-0 rounded border-line accent-[rgb(var(--accent))]"
             checked={selected.includes(f.value)}
             onChange={() => onToggle(f.value)}
           />
@@ -127,18 +130,32 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
   }).filter((f) => f.count > 0 || (filters.experience ?? []).includes(f.value as never));
 
   return (
-    <aside className="card p-4" aria-label="Filters">
-      <div className="mb-1 flex items-center justify-between">
-        <h2 className="text-sm font-semibold">
-          Filters {activeCount > 0 ? <span className="text-brand">({activeCount})</span> : null}
-        </h2>
-        {activeCount > 0 ? (
-          <button type="button" className="text-xs text-brand hover:underline" onClick={onReset}>
-            Clear all
-          </button>
-        ) : null}
+    <aside className="card p-3" aria-label="Filters">
+      <div className="mb-3">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-sm font-semibold">
+            Filters{' '}
+            {activeCount > 0 ? (
+              <span className="ml-0.5 rounded-full bg-accent/15 px-1.5 py-0.5 text-xs font-semibold text-accent">
+                {activeCount}
+              </span>
+            ) : null}
+          </h2>
+          <span className="text-xs tabular-nums text-muted">{total.toLocaleString('en-CA')} jobs</span>
+        </div>
+        {/* Always present, disabled when there is nothing to clear — a control
+            that appears and disappears makes the panel jump as you filter. */}
+        <button
+          type="button"
+          onClick={onReset}
+          disabled={activeCount === 0}
+          className="btn mt-2.5 w-full py-1.5 text-xs"
+        >
+          Clear all filters
+        </button>
       </div>
-      <p className="mb-2 text-xs text-muted">{total.toLocaleString('en-CA')} matching postings</p>
+
+      <div className="space-y-2">
 
       <Section title="Date posted">
         <div className="flex flex-wrap gap-1.5">
@@ -153,8 +170,10 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
             </button>
           ))}
         </div>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <label className="text-xs text-muted">
+        {/* Stacked, not side by side: two date fields in a 118px column clip
+            "mm/dd/yyyy" and its picker glyph in every browser we checked. */}
+        <div className="mt-2 grid gap-2">
+          <label className="block text-xs text-muted">
             From
             <input
               type="date"
@@ -163,7 +182,7 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
               onChange={(e) => onChange({ postedFrom: e.target.value || undefined, postedWithinDays: undefined, page: 1 })}
             />
           </label>
-          <label className="text-xs text-muted">
+          <label className="block text-xs text-muted">
             To
             <input
               type="date"
@@ -222,7 +241,7 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
         <label className="flex cursor-pointer items-center gap-2 text-sm">
           <input
             type="checkbox"
-            className="h-4 w-4 rounded border-line accent-[rgb(var(--brand))]"
+            className="h-4 w-4 rounded border-line accent-[rgb(var(--accent))]"
             checked={Boolean(filters.hasSalary)}
             onChange={(e) => onChange({ hasSalary: e.target.checked || undefined, page: 1 })}
           />
@@ -250,7 +269,7 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
         <label className="flex cursor-pointer items-center gap-2 text-sm">
           <input
             type="checkbox"
-            className="h-4 w-4 rounded border-line accent-[rgb(var(--brand))]"
+            className="h-4 w-4 rounded border-line accent-[rgb(var(--accent))]"
             checked={Boolean(filters.onlyPathway)}
             onChange={(e) => onChange({ onlyPathway: e.target.checked || undefined, page: 1 })}
           />
@@ -259,7 +278,7 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
         <label className="flex cursor-pointer items-center gap-2 text-sm">
           <input
             type="checkbox"
-            className="h-4 w-4 rounded border-line accent-[rgb(var(--brand))]"
+            className="h-4 w-4 rounded border-line accent-[rgb(var(--accent))]"
             checked={filters.includePathway === false}
             onChange={(e) => onChange({ includePathway: e.target.checked ? false : undefined, page: 1 })}
           />
@@ -268,13 +287,14 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
         <label className="flex cursor-pointer items-center gap-2 text-sm">
           <input
             type="checkbox"
-            className="h-4 w-4 rounded border-line accent-[rgb(var(--brand))]"
+            className="h-4 w-4 rounded border-line accent-[rgb(var(--accent))]"
             checked={Boolean(filters.includeExpired)}
             onChange={(e) => onChange({ includeExpired: e.target.checked || undefined, page: 1 })}
           />
           Include likely-expired postings
         </label>
       </Section>
+      </div>
     </aside>
   );
 }

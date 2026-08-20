@@ -16,6 +16,7 @@ import { matchLocation } from '../src/lib/taxonomy/ontario';
 import { normalizeTitle, inferExperienceLevel } from '../src/lib/taxonomy/titles';
 import { buildDeepLinks } from '../src/lib/deeplinks';
 import { decodeEscapedHtml } from '../src/lib/normalize/html';
+import { mergeSnapshots, sanityCheck } from '../src/lib/merge';
 import { TOKENS as JOBBANK_TOKENS, parseFeed as parseJobBankFeed } from '../src/lib/sources/jobbank';
 import { activeSources } from '../src/lib/sources/registry';
 import type { RawJob } from '../src/lib/types';
@@ -169,6 +170,27 @@ check('Flagged as pathway', helpdesk.job?.isPathwayRole === true);
 check('Category = adjacent_it', helpdesk.job?.category === 'adjacent_it', helpdesk.job?.category);
 check('Pathway ranked below SOC', (helpdesk.job?.rankScore ?? 0) < (soc.job?.rankScore ?? 0));
 
+// Regression: "penetration test" with a \\b anchor never matched "Tester" or
+// "tests", so core offensive-security roles were rejected outright.
+const pentest = normalizeJob(
+  raw({
+    title: 'Penetration Tester',
+    locationRaw: 'Mississauga, ON',
+    description: 'Perform web application and network penetration tests using Burp Suite and Nmap. OSCP preferred.',
+  }),
+);
+check('Penetration Tester kept', pentest.job !== null, pentest.reason);
+check('Category = penetration_testing', pentest.job?.category === 'penetration_testing', pentest.job?.category);
+
+const redteam = normalizeJob(
+  raw({
+    title: 'Senior Pentester',
+    locationRaw: 'Toronto, ON',
+    description: 'Adversary emulation, red team engagements and pen testing across our estate. Metasploit, Cobalt Strike.',
+  }),
+);
+check('Pentester title kept', redteam.job !== null, redteam.reason);
+
 const unrelated = normalizeJob(
   raw({ title: 'Registered Nurse', description: 'Provide patient care on the medical floor.' }),
 );
@@ -271,6 +293,55 @@ check('Richer source wins', survivor?.sourceId === 'greenhouse', survivor?.sourc
 check('Earliest posted date kept', survivor?.postedAt === normalised.find((j) => j.sourceId === 'jobbank')?.postedAt);
 check('Alternate source recorded', (survivor?.alsoPostedOn ?? []).length === 1);
 check('Salary survives merge', survivor?.salary.min === 90000, survivor?.salary);
+
+/* ------------------------------------------------------------------ */
+section('Carry-forward between publishes');
+
+const mk = (id: string, over: Partial<import('../src/lib/types').Job> = {}) =>
+  ({
+    ...(normalizeJob(raw({ title: 'Security Analyst', locationRaw: 'Toronto, ON' })).job as import('../src/lib/types').Job),
+    id,
+    ...over,
+  });
+
+const MERGE_OPTS = { retentionDays: 21, staleDays: 3 };
+
+// A source going dark must not remove its postings from the site.
+const prevSet = [
+  mk('keep-fresh', { lastSeenAt: daysAgo(0), firstSeenAt: daysAgo(30) }),
+  mk('go-stale', { lastSeenAt: daysAgo(5), firstSeenAt: daysAgo(40), isExpired: false }),
+  mk('too-old', { lastSeenAt: daysAgo(25), firstSeenAt: daysAgo(60) }),
+];
+const currSet = [mk('keep-fresh', { firstSeenAt: daysAgo(0) }), mk('brand-new')];
+
+const m = mergeSnapshots(prevSet, currSet, MERGE_OPTS);
+const byId = new Map(m.jobs.map((j) => [j.id, j]));
+
+check('New posting added', m.added === 1 && byId.has('brand-new'), m.added);
+check('Seen-again posting refreshed', m.refreshed === 1);
+check('Unseen posting carried forward', byId.has('go-stale'));
+check('Carried posting marked expired past staleDays', byId.get('go-stale')?.isExpired === true);
+check('Posting past retention dropped', !byId.has('too-old') && m.dropped === 1);
+check('firstSeenAt preserved across merge', byId.get('keep-fresh')?.firstSeenAt === daysAgo(30), byId.get('keep-fresh')?.firstSeenAt);
+check('lastSeenAt refreshed for seen jobs', (Date.now() - Date.parse(byId.get('keep-fresh')!.lastSeenAt)) < 5000);
+check('Counts add up', m.jobs.length === m.added + m.refreshed + m.carried, { len: m.jobs.length, m });
+
+// The scenario this exists for: every connector fails.
+const outage = mergeSnapshots(prevSet, [], MERGE_OPTS);
+check('Total connector outage keeps the site populated', outage.jobs.length === 2, outage.jobs.length);
+
+// First ever run.
+const first = mergeSnapshots([], currSet, MERGE_OPTS);
+check('First run works with no baseline', first.jobs.length === 2 && first.added === 2);
+
+// A reappearing posting should come back to life.
+const revived = mergeSnapshots([mk('back', { isExpired: true, lastSeenAt: daysAgo(4) })], [mk('back', { isExpired: false })], MERGE_OPTS);
+check('Reappearing posting un-expires', revived.jobs[0]?.isExpired === false);
+
+check('Sanity check passes normal runs', sanityCheck(70, 72) === null);
+check('Sanity check blocks an empty merge', sanityCheck(70, 0) !== null);
+check('Sanity check blocks a mass disappearance', sanityCheck(70, 20) !== null);
+check('Sanity check tolerates small datasets', sanityCheck(5, 3) === null);
 
 /* ------------------------------------------------------------------ */
 section('Search, filters and facets');

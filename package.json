@@ -19,7 +19,8 @@
     "selftest": "tsx scripts/selftest.ts",
     "data": "tsx scripts/build-data.ts",
     "build:static": "STATIC_EXPORT=1 next build",
-    "publish": "npm run data && npm run build:static"
+    "publish": "npm run data && npm run build:static",
+    "fixture": "tsx scripts/fixture-data.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",

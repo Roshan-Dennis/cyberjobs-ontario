@@ -51,7 +51,7 @@ function TagList({ items, tone = 'default' }: { items: string[]; tone?: 'default
   return (
     <div className="flex flex-wrap gap-1.5">
       {items.map((i) => (
-        <span key={i} className={`chip ${tone === 'brand' ? 'border-brand/30 bg-brand/10 text-brand' : ''}`}>
+        <span key={i} className={tone === 'brand' ? 'tag-cert' : 'tag'}>
           {i}
         </span>
       ))}
@@ -84,21 +84,21 @@ export default async function JobPage({ params }: Props) {
         </p>
 
         <div className="mt-3 flex flex-wrap gap-1.5">
-          <span className="chip">{CATEGORY_LABELS[job.category]}</span>
+          <span className="badge">{CATEGORY_LABELS[job.category]}</span>
           {job.secondaryCategories.map((c) => (
-            <span key={c} className="chip">
+            <span key={c} className="badge">
               {CATEGORY_LABELS[c]}
             </span>
           ))}
           {job.workArrangement !== 'unknown' ? (
-            <span className="chip capitalize">{job.workArrangement}</span>
+            <span className="badge capitalize">{job.workArrangement}</span>
           ) : null}
-          {job.experienceLevel !== 'unknown' ? <span className="chip">{EXPERIENCE_LABELS[job.experienceLevel]}</span> : null}
-          {job.employmentType !== 'unknown' ? <span className="chip">{EMPLOYMENT_LABELS[job.employmentType]}</span> : null}
+          {job.experienceLevel !== 'unknown' ? <span className="badge">{EXPERIENCE_LABELS[job.experienceLevel]}</span> : null}
+          {job.employmentType !== 'unknown' ? <span className="badge">{EMPLOYMENT_LABELS[job.employmentType]}</span> : null}
           {job.isPathwayRole ? (
-            <span className="chip border-warn/40 bg-warn/15 text-warn">Pathway into cyber</span>
+            <span className="badge badge-alert">Pathway into cyber</span>
           ) : null}
-          {job.isExpired ? <span className="chip">Likely expired</span> : null}
+          {job.isExpired ? <span className="badge text-muted">Likely expired</span> : null}
         </div>
 
         <div className="mt-5 border-t border-line pt-5">
