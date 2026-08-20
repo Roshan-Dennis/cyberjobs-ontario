@@ -17,6 +17,7 @@ No fabricated data. No scraping of sites that forbid it. Every posting links bac
 - [Quick start](#quick-start)
 - [Deploying to Vercel + Supabase](#deploying-to-vercel--supabase)
 - [Scheduled refresh](#scheduled-refresh)
+- [What it costs](#what-it-costs)
 - [Configuration reference](#configuration-reference)
 - [Adding a company board](#adding-a-company-board)
 - [Adding a new source](#adding-a-new-source)
@@ -193,7 +194,7 @@ curl -H "Authorization: Bearer $CRON_SECRET" \
 
 Then check `https://<your-app>.vercel.app/api/health`.
 
-> **Note on Vercel's Hobby plan:** cron jobs run **once per day** and functions are capped at 60s. Either upgrade, or use the included GitHub Action instead — see below.
+> **Note on Vercel's Hobby (free) plan:** cron jobs may run **at most once per day**, and a more frequent expression **fails the deployment** with *"Hobby accounts are limited to daily cron jobs"*. `vercel.json` therefore ships with a daily schedule. For a 4-hourly refresh, use the included GitHub Action (option b below) — it costs nothing — or upgrade to Pro and change the schedule to `0 */4 * * *`.
 
 ---
 
@@ -213,6 +214,24 @@ Three options, pick one:
 **c) GitHub Actions running the pipeline itself** — set the variable `USE_LOCAL_INGEST=true` and the secrets `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. The Action executes the ingest on its own runner (no 300s limit) and writes directly to Supabase.
 
 Trigger any of them manually from the **Actions** tab.
+
+---
+
+## What it costs
+
+Nothing, on the free tiers — with two caveats worth knowing before you start.
+
+| | Free allowance | What this project uses |
+|---|---|---|
+| **Vercel Hobby** | 1M function invocations, 1M edge requests, 4 CPU-hrs/month | A daily ingest plus normal browsing is a rounding error against these |
+| **Supabase Free** | 500 MB database, 5 GB egress, 2 active projects | A few thousand postings with full descriptions is well under 100 MB |
+| **GitHub Actions** | Free for public repositories | CI plus a 4-hourly ingest ping |
+
+**Caveat 1 — Vercel Hobby is personal use only.** Vercel's fair-use guidelines restrict the Hobby plan to non-commercial, personal projects. Running this as your own job-search tool is fine. Turning it into a product, putting ads on it, or operating it for an organisation needs Pro ($20/month).
+
+**Caveat 2 — Supabase pauses free projects after 1 week of inactivity.** A daily cron counts as activity, so a deployed instance stays awake on its own. A project you deploy and then ignore for a week will be paused until you restore it from the dashboard.
+
+Neither Adzuna nor Jooble is required; both are optional connectors with free developer tiers if you want the extra coverage.
 
 ---
 

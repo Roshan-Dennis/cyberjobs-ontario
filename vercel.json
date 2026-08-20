@@ -2,10 +2,20 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
   "regions": ["iad1"],
+  "_comment_crons": [
+    "Daily, deliberately. Vercel's Hobby (free) plan allows at most one cron run",
+    "per day and FAILS THE DEPLOYMENT outright for any expression that would run",
+    "more often - '0 */4 * * *' is rejected with 'Hobby accounts are limited to",
+    "daily cron jobs'. For a more frequent refresh either upgrade to Pro and",
+    "change this to '0 */4 * * *', or use .github/workflows/ingest.yml, which",
+    "pings this same endpoint every 4 hours from GitHub Actions at no cost.",
+    "The minute is off the hour on purpose: Hobby cron timing is +/-59 minutes",
+    "and everyone else schedules on :00."
+  ],
   "crons": [
     {
       "path": "/api/cron/ingest",
-      "schedule": "0 */4 * * *"
+      "schedule": "23 6 * * *"
     }
   ],
   "functions": {
