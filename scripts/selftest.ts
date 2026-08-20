@@ -15,6 +15,7 @@ import { parseSalary } from '../src/lib/normalize/salary';
 import { matchLocation } from '../src/lib/taxonomy/ontario';
 import { normalizeTitle, inferExperienceLevel } from '../src/lib/taxonomy/titles';
 import { buildDeepLinks } from '../src/lib/deeplinks';
+import { decodeEscapedHtml } from '../src/lib/normalize/html';
 import { TOKENS as JOBBANK_TOKENS, parseFeed as parseJobBankFeed } from '../src/lib/sources/jobbank';
 import { activeSources } from '../src/lib/sources/registry';
 import type { RawJob } from '../src/lib/types';
@@ -198,6 +199,30 @@ check('onerror stripped', !(htmlJob.job?.descriptionHtml ?? '').toLowerCase().in
 check('Safe link kept', (htmlJob.job?.descriptionHtml ?? '').includes('https://example.com'));
 check('Plain text derived', (htmlJob.job?.description ?? '').includes('OWASP Top 10'));
 check('Category = application_security', htmlJob.job?.category === 'application_security', htmlJob.job?.category);
+
+/* ------------------------------------------------------------------ */
+section('Entity-encoded HTML (Greenhouse)');
+
+// Greenhouse serves `content` entity-encoded. Missing this put literal <p> tags
+// into the summary of all 34 Greenhouse postings on the first live site.
+const escaped = '&lt;p&gt;We&rsquo;re hiring a &lt;strong&gt;Security Analyst&lt;/strong&gt;.&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Splunk&lt;/li&gt;&lt;/ul&gt;';
+const decoded = decodeEscapedHtml(escaped);
+check('Escaped markup is decoded', decoded.includes('<strong>'), decoded.slice(0, 60));
+check('Real HTML is left alone', decodeEscapedHtml('<p>Already <b>fine</b> &amp; valid</p>') === '<p>Already <b>fine</b> &amp; valid</p>');
+check('Plain text is left alone', decodeEscapedHtml('No markup here at all') === 'No markup here at all');
+
+const gh = normalizeJob(
+  raw({
+    title: 'Security Analyst',
+    locationRaw: 'Toronto, ON',
+    descriptionIsHtml: true,
+    description: escaped + '&lt;p&gt;Requires incident response and SIEM experience with MITRE ATT&amp;CK.&lt;/p&gt;',
+  }),
+);
+check('Encoded posting normalises', gh.job !== null, gh.reason);
+check('Summary has no literal tags', !/[<>]/.test(gh.job?.summary ?? ''), gh.job?.summary?.slice(0, 80));
+check('Rendered HTML has real tags', (gh.job?.descriptionHtml ?? '').includes('<strong>'));
+check('Tech still extracted through the decode', (gh.job?.requirements.technologies ?? []).includes('Splunk'));
 
 /* ------------------------------------------------------------------ */
 section('Deduplication');
