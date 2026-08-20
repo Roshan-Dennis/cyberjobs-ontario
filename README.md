@@ -4,6 +4,8 @@ A live cybersecurity job aggregator for **all of Ontario** plus **remote-Canada*
 
 It pulls postings from company career-site APIs, the Government of Canada Job Bank and licensed job-search APIs, then normalises, deduplicates, categorises, enriches and ranks them behind a fast search UI with deep filtering, saved jobs and a market dashboard.
 
+**It runs on nothing.** No server, no database, no paid tier, no third-party account. A GitHub Action collects the postings hourly, bakes them into a JSON file and publishes a static site to GitHub Pages. Search, filtering and faceting run in your browser, so they are instant.
+
 No fabricated data. No scraping of sites that forbid it. Every posting links back to the employer's own application page.
 
 ---
@@ -15,8 +17,7 @@ No fabricated data. No scraping of sites that forbid it. Every posting links bac
 - [Why LinkedIn, Indeed and Glassdoor are not indexed](#why-linkedin-indeed-and-glassdoor-are-not-indexed)
 - [Architecture](#architecture)
 - [Quick start](#quick-start)
-- [Deploying to Vercel + Supabase](#deploying-to-vercel--supabase)
-- [Scheduled refresh](#scheduled-refresh)
+- [Deploying](#deploying)
 - [What it costs](#what-it-costs)
 - [Configuration reference](#configuration-reference)
 - [Adding a company board](#adding-a-company-board)
@@ -102,34 +103,39 @@ If you have a licensed commercial feed (Adzuna paid tier, a SerpApi subscription
 ## Architecture
 
 ```
-                       ┌───────────────────────────────────────┐
-  Vercel Cron ────────▶│  /api/cron/ingest   (auth: CRON_SECRET)│
-  GitHub Actions ─────▶└──────────────────┬────────────────────┘
-                                          │
-                                   runIngest()
-                                          │
-              ┌───────────────────────────┼───────────────────────────┐
-              │                           │                           │
-        connectors                   normalise                     persist
-   greenhouse / lever /        classify → geo-match →        Supabase Postgres
-   ashby / workable /          extract skills, certs,        (or JSON file store
-   recruitee / workday /       salary, seniority →           with zero config)
-   jobbank / adzuna /          fingerprint → dedupe →
-   jooble / arbeitnow          rank
-                                          │
-                                          ▼
-                            ┌──────────────────────────┐
-   Browser ◀── /api/jobs ───│  read-through cache (60s) │
-              /api/stats    └──────────────────────────┘
-              /api/facets
+   GitHub Actions (hourly)
+   ────────────────────────────────────────────────────────
+    npm run data                       npm run build:static
+        │                                      │
+   ┌────┴──────────────┐             ┌─────────┴──────────┐
+   │ connectors        │             │ Next.js static     │
+   │  greenhouse       │  normalise  │ export             │
+   │  lever            │  classify   │                    │
+   │  ashby       ───▶ │  geo-match  │  index.html        │
+   │  workable         │  extract    │  jobs/<id>/…  one  │
+   │  recruitee        │  dedupe     │   page per posting │
+   │  workday          │  rank       │  data/jobs.json    │
+   │  jobbank          │             │   the search index │
+   │  adzuna, jooble   │             └─────────┬──────────┘
+   └───────────────────┘                       │
+                                       deploy to Pages
+                                               │
+                                               ▼
+                           Browser: fetches data/jobs.json once,
+                           then filters / sorts / facets locally
 ```
 
-- **Framework** — Next.js 15 (App Router, React 19, TypeScript strict, Tailwind).
-- **Storage** — Supabase Postgres. The normalised job document lives in a `jsonb` payload with generated columns and GIN/trigram/full-text indexes promoted for querying; see `supabase/schema.sql`.
-- **Fallback store** — if no Supabase credentials are present the app uses an in-process + JSON-file store and triggers an ingest on first request, so `git clone && npm run dev` shows real live jobs with zero setup.
-- **Search** — filtering, sorting and exact facet counts are computed in a 60-second read-through cache over the active job set. At the scale of a provincial cybersecurity board (thousands of postings) this is faster than round-tripping SQL per keystroke and keeps one implementation of the filter semantics. The SQL indexes are there for direct querying and for when the dataset outgrows that.
-- **Rate limiting** — per-host request serialisation with configurable delays; `robots.txt` is parsed and cached per origin (`src/lib/robots.ts`).
-- **Resilience** — every connector is isolated: a failing source produces an entry in the run report and never aborts the run. Ingestion respects a wall-clock budget so it always finishes inside the serverless function limit.
+- **Framework** — Next.js 15 (App Router, React 19, TypeScript strict, Tailwind), built with `output: 'export'`.
+- **No runtime** — the deployed site is plain HTML, CSS, JS and one JSON file. Nothing to pay for, nothing to keep awake, nothing to secure.
+- **Search** — `src/lib/query.ts` is pure TypeScript with no Node dependencies, so the same filtering, sorting and facet-counting code runs in the browser. Changing a filter costs no network round-trip.
+- **Job pages** — prerendered at build time, one static page per posting, so every job has a real crawlable URL.
+- **Payload size** — the browser downloads `data/jobs.json` with descriptions truncated to 1,200 characters (enough to search against); the full text lives on the prerendered detail pages. That keeps a 100-job set near 200 KB rather than 1 MB.
+- **Rate limiting** — per-host request serialisation; `robots.txt` is parsed and cached per origin (`src/lib/robots.ts`).
+- **Resilience** — every connector is isolated: a failing source produces an entry in the run report and never aborts the run. Each source has its own time ceiling so one slow site cannot starve the rest.
+
+### Optional: running it with a server and database
+
+The pipeline still supports writing to Supabase Postgres (`supabase/schema.sql`, `src/lib/store/`) via `npm run ingest`, if you would rather run this as a live server-rendered app. That path is not what the published site uses and is not covered by CI.
 
 ---
 
@@ -142,10 +148,11 @@ git clone https://github.com/Roshan-Dennis/cyberjobs-ontario.git
 cd cyberjobs-ontario
 npm install
 cp .env.example .env.local     # optional — the app runs without it
+npm run data                   # collect postings into data/ and public/data/
 npm run dev
 ```
 
-Open <http://localhost:3000>. The first request kicks off a live ingest; refresh after ten or twenty seconds.
+Open <http://localhost:3000>. `npm run data` is what produces the JSON the UI reads; without it the site loads but shows no postings.
 
 To watch the pipeline directly:
 
@@ -158,80 +165,45 @@ npm run ingest -- --only greenhouse,lever --budget 120000
 
 ---
 
-## Deploying to Vercel + Supabase
+## Deploying
 
-Both have free tiers sufficient for this workload.
+One-time setup, about two minutes. You need nothing but the GitHub account you already have — no card, no signups.
 
-### 1. Create the database
+1. **Settings → Pages → Build and deployment → Source:** choose **GitHub Actions**.
+2. **Actions → "Publish to GitHub Pages" → Run workflow.**
 
-1. Create a project at <https://supabase.com>.
-2. Open **SQL Editor** and run the whole of [`supabase/schema.sql`](supabase/schema.sql).
-3. From **Project Settings → API**, copy the **Project URL** and the **`service_role`** key.
+The site appears at `https://<your-username>.github.io/<repo>/` and republishes every hour.
 
-### 2. Deploy the app
+### Optional repository variables
 
-1. Import this repository at <https://vercel.com/new>. Framework preset: **Next.js** (auto-detected).
-2. Add environment variables:
+Under **Settings → Secrets and variables → Actions → Variables**:
 
-   | Name | Value |
-   |---|---|
-   | `SUPABASE_URL` | your project URL |
-   | `SUPABASE_SERVICE_ROLE_KEY` | your `service_role` key |
-   | `CRON_SECRET` | any long random string — `openssl rand -hex 32` |
-   | `NEXT_PUBLIC_SITE_URL` | `https://<your-app>.vercel.app` |
-   | `CRAWLER_CONTACT` | a URL or email site operators can reach you at |
+| Variable | When you need it |
+|---|---|
+| `BASE_PATH` | Set to an empty string for a custom domain or a `<username>.github.io` repo. Defaults to `/<repo>`. |
+| `SITE_URL` | Canonical URL for the sitemap. Defaults to the Pages URL. |
+| `CRAWLER_CONTACT` | URL or email advertised in the crawler User-Agent. Defaults to your repo URL. |
 
-3. Deploy.
+Optional secrets `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` / `JOOBLE_API_KEY` enable two extra connectors. Everything works without them.
 
-`vercel.json` already registers the cron job (`/api/cron/ingest`, every 4 hours) and raises that function's timeout to 300s. Vercel picks it up on the first production deploy.
+### One caveat worth knowing
 
-### 3. Seed the first run
-
-```bash
-curl -H "Authorization: Bearer $CRON_SECRET" \
-  "https://<your-app>.vercel.app/api/cron/ingest"
-```
-
-Then check `https://<your-app>.vercel.app/api/health`.
-
-> **Note on Vercel's Hobby (free) plan:** cron jobs may run **at most once per day**, and a more frequent expression **fails the deployment** with *"Hobby accounts are limited to daily cron jobs"*. `vercel.json` therefore ships with a daily schedule. For a 4-hourly refresh, use the included GitHub Action (option b below) — it costs nothing — or upgrade to Pro and change the schedule to `0 */4 * * *`.
-
----
-
-## Scheduled refresh
-
-Three options, pick one:
-
-**a) Vercel Cron** — already configured in `vercel.json`. Nothing else to do on Pro.
-
-**b) GitHub Actions pinging your deployment** *(works on Hobby)* — in your repo settings:
-
-- **Variables** → `INGEST_URL` = `https://<your-app>.vercel.app/api/cron/ingest`
-- **Secrets** → `CRON_SECRET` = the same value as in Vercel
-
-`.github/workflows/ingest.yml` then runs every 4 hours.
-
-**c) GitHub Actions running the pipeline itself** — set the variable `USE_LOCAL_INGEST=true` and the secrets `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`. The Action executes the ingest on its own runner (no 300s limit) and writes directly to Supabase.
-
-Trigger any of them manually from the **Actions** tab.
+GitHub **disables scheduled workflows after 60 days without repository activity**. If you stop touching the repo for two months, hourly publishing pauses until you push a commit or re-enable it. Nothing breaks — the site stays up with its last data.
 
 ---
 
 ## What it costs
 
-Nothing, on the free tiers — with two caveats worth knowing before you start.
+Nothing, and there is no billing relationship to enter into.
 
-| | Free allowance | What this project uses |
+| | Free allowance | What this uses |
 |---|---|---|
-| **Vercel Hobby** | 1M function invocations, 1M edge requests, 4 CPU-hrs/month | A daily ingest plus normal browsing is a rounding error against these |
-| **Supabase Free** | 500 MB database, 5 GB egress, 2 active projects | A few thousand postings with full descriptions is well under 100 MB |
-| **GitHub Actions** | Free for public repositories | CI plus a 4-hourly ingest ping |
+| **GitHub Pages** | 1 GB site, 100 GB/month bandwidth (soft) | A few MB of HTML plus one JSON file |
+| **GitHub Actions** | Unlimited minutes on public repositories | ~4 minutes per hourly publish |
 
-**Caveat 1 — Vercel Hobby is personal use only.** Vercel's fair-use guidelines restrict the Hobby plan to non-commercial, personal projects. Running this as your own job-search tool is fine. Turning it into a product, putting ads on it, or operating it for an organisation needs Pro ($20/month).
+No credit card, no account beyond GitHub, no database to keep awake, no function invocations to meter.
 
-**Caveat 2 — Supabase pauses free projects after 1 week of inactivity.** A daily cron counts as activity, so a deployed instance stays awake on its own. A project you deploy and then ignore for a week will be paused until you restore it from the dashboard.
-
-Neither Adzuna nor Jooble is required; both are optional connectors with free developer tiers if you want the extra coverage.
+The one restriction that exists: GitHub Pages may not be used to run an online business, e-commerce site, or commercial SaaS. A personal job-search tool is none of those. Turning this into a commercial product would need different hosting.
 
 ---
 
@@ -336,35 +308,37 @@ Tune the cutoff with `INGEST_MIN_RELEVANCE`. Every rejection reason is counted i
 ```
 src/
   app/
-    page.tsx                    search UI (Suspense wrapper)
-    jobs/[id]/page.tsx          job detail
+    page.tsx                    search UI (client-rendered)
+    jobs/[id]/page.tsx          job detail, prerendered one per posting
     dashboard/page.tsx          market dashboard
     saved/page.tsx              saved jobs + application tracker
-    about/page.tsx              live source status and legal position
-    api/
-      jobs/route.ts             search + facets + deep links
-      jobs/[id]/route.ts        single job
-      stats/route.ts            dashboard aggregates
-      sources/route.ts          connector status
-      health/route.ts           liveness + store health
-      cron/ingest/route.ts      authenticated refresh trigger
-  components/                   JobCard, FilterPanel, SearchBar, charts…
+    about/page.tsx              source status and legal position
+  components/                   JobBrowser, FilterPanel, SearchBar, charts…
   lib/
     types.ts                    domain model
     config.ts                   env parsing
     http.ts                     retry, timeout, per-host rate limiting
     robots.ts                   robots.txt parser + cache
     ingest.ts                   orchestrator
-    cache.ts                    read-through cache + auto-bootstrap
     query.ts                    filtering, sorting, faceting, URL state
+                                (pure — runs in the browser)
+    snapshot.ts                 build-time reader for the JSON snapshot
+    client/dataset.ts           browser-side loader for the JSON snapshot
+    client/storage.ts           saved jobs, search history (localStorage)
     deeplinks.ts                LinkedIn/Indeed/Glassdoor link builder
     sources/                    one file per connector + company registry
     normalize/                  html, dates, salary, extraction, relevance, dedupe
     taxonomy/                   cyber terms, Ontario gazetteer, title rules
-    store/                      Supabase and file-backed stores
-scripts/                        ingest and source-listing CLIs
-supabase/schema.sql             tables, indexes, RLS, retention function
-.github/workflows/              CI and scheduled ingest
+    store/                      optional Supabase / file persistence
+scripts/
+  build-data.ts                 produces the JSON snapshots
+  ingest.ts                     CLI ingest into the optional store
+  selftest.ts                   86 assertions over the transform layer
+  list-sources.ts               connector status
+supabase/schema.sql             optional database schema
+.github/workflows/
+  ci.yml                        typecheck, lint, self-test, build
+  pages.yml                     hourly: collect data, export, publish
 ```
 
 ---
@@ -372,31 +346,27 @@ supabase/schema.sql             tables, indexes, RLS, retention function
 ## Operations
 
 ```bash
-# Is it alive, and which store is it using?
-curl https://<app>/api/health
-
-# Which connectors are configured?
-curl https://<app>/api/sources
-
-# Force a refresh
-curl -H "Authorization: Bearer $CRON_SECRET" https://<app>/api/cron/ingest
-
-# Dry run with full per-source diagnostics
-npm run ingest:dry
+npm run sources                # which connectors are enabled here
+npm run data                   # collect postings and write both snapshots
+npm run data -- --only greenhouse,lever --budget 120000
+npm run selftest               # 86 assertions over the transform layer
+npm run publish                # data + static export into out/
 ```
 
-The ingest response includes a per-source report (fetched / kept / duration / error) plus the log lines, so a source that has quietly stopped returning results is obvious.
+Every publish prints a per-source table (fetched / kept / duration / error) to the
+Actions run summary, so a source that has quietly stopped returning results is
+visible at a glance.
 
 **Common issues**
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Zero jobs after deploy | Ingest has not run yet | Call `/api/cron/ingest` once |
-| Jobs appear then vanish on redeploy | No database configured — using the ephemeral file store | Set `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` |
-| `401` from the cron endpoint | Missing or wrong `CRON_SECRET` | Check both Vercel and the caller |
-| Function timeout during ingest | Budget above the plan's limit | Lower `INGEST_MAX_DURATION_MS`, or split runs with `INGEST_SOURCES` |
-| Job Bank returns nothing | Their markup changed, or robots.txt now disallows | Check the run log — the connector reports which |
+| Site shows no jobs | `npm run data` never ran, or the publish failed | Check the latest "Publish to GitHub Pages" run |
+| Publish fails with "No postings collected" | Every connector failed — usually no network | Deliberate: it refuses to publish an empty site |
+| Data stopped updating | GitHub disabled the schedule after 60 days idle | Push any commit, or re-enable the workflow |
 | Many `boards unavailable` | Companies changed ATS | Harmless; prune `companies.ts` when convenient |
+| Job Bank returns 0 | Job Bank blocks some source IPs, including GitHub Actions runners | Known — see the comment in `src/lib/sources/jobbank.ts` |
+| Assets 404 after moving to a custom domain | `basePath` still set to `/<repo>` | Set the `BASE_PATH` repository variable to an empty string |
 
 ---
 

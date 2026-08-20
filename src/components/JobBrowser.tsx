@@ -8,8 +8,10 @@ import { Pagination } from '@/components/Pagination';
 import { SearchBar } from '@/components/SearchBar';
 import { DeepLinks, type DeepLinkItem } from '@/components/DeepLinks';
 import { searchHistory } from '@/lib/client/storage';
-import { filtersFromSearchParams, searchParamsFromFilters } from '@/lib/query';
-import type { JobFilters, JobSearchResult, SortKey } from '@/lib/types';
+import { loadDataset } from '@/lib/client/dataset';
+import { buildDeepLinks } from '@/lib/deeplinks';
+import { filtersFromSearchParams, searchJobs, searchParamsFromFilters } from '@/lib/query';
+import type { Job, JobFilters, JobSearchResult, SortKey } from '@/lib/types';
 
 type ApiResult = JobSearchResult & { deepLinks: DeepLinkItem[] };
 
@@ -31,50 +33,52 @@ export function JobBrowser() {
     [searchParams],
   );
 
+  const [dataset, setDataset] = useState<Job[] | null>(null);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [data, setData] = useState<ApiResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [infinite, setInfinite] = useState(false);
-  const [extraPages, setExtraPages] = useState<ApiResult['jobs']>([]);
-  const abortRef = useRef<AbortController | null>(null);
+  const [visiblePages, setVisiblePages] = useState(1);
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const queryString = searchParams.toString();
 
-  const load = useCallback(
-    async (qs: string, append = false) => {
-      abortRef.current?.abort();
-      const controller = new AbortController();
-      abortRef.current = controller;
-      if (!append) setLoading(true);
-      setError(null);
-      try {
-        const res = await fetch(`/api/jobs?${qs}`, { signal: controller.signal, cache: 'no-store' });
-        if (!res.ok) throw new Error(`Search failed (${res.status})`);
-        const json = (await res.json()) as ApiResult;
-        if (append) setExtraPages((prev) => [...prev, ...json.jobs]);
-        else {
-          setData(json);
-          setExtraPages([]);
+  // The dataset is fetched once. Everything after this — filtering, sorting,
+  // faceting, pagination — runs in the browser against that array, so changing
+  // a filter is instant and costs no network round-trip.
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    loadDataset()
+      .then((d) => {
+        if (cancelled) return;
+        setDataset(d.jobs);
+        setGeneratedAt(d.generatedAt);
+        if (d.jobs.length === 0) {
+          setError('No job data found. If you are running locally, run `npm run data` first.');
         }
-        return json;
-      } catch (err) {
-        if ((err as Error).name === 'AbortError') return null;
-        setError(err instanceof Error ? err.message : 'Search failed');
-        return null;
-      } finally {
-        setLoading(false);
-      }
-    },
-    [],
-  );
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load job data');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
-    void load(queryString);
-  }, [queryString, load]);
+    if (!dataset) return;
+    const result = searchJobs(dataset, filters, { lastIngestAt: generatedAt, notes: [], degraded: false });
+    setData({ ...result, deepLinks: buildDeepLinks(filters) });
+    setVisiblePages(1);
+  }, [dataset, filters, generatedAt]);
 
-  // Record the search in local history once results arrive.
+  // Record the search in local history once results settle.
   useEffect(() => {
     if (!data) return;
     searchHistory.push({
@@ -97,31 +101,36 @@ export function JobBrowser() {
 
   const reset = useCallback(() => router.push(pathname, { scroll: false }), [pathname, router]);
 
-  // Infinite scroll.
+  // Infinite scroll simply reveals more of the already-computed result set.
   useEffect(() => {
     if (!infinite || !data) return;
     const el = sentinelRef.current;
     if (!el) return;
-    const loadedPages = 1 + Math.ceil(extraPages.length / data.pageSize);
-    if (loadedPages >= data.totalPages) return;
+    if (visiblePages >= data.totalPages) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (!entries[0].isIntersecting || loading) return;
-        const params = new URLSearchParams(queryString);
-        params.set('page', String((filters.page ?? 1) + loadedPages));
-        void load(params.toString(), true);
+        if (entries[0].isIntersecting) setVisiblePages((p) => p + 1);
       },
       { rootMargin: '400px' },
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, [infinite, data, extraPages.length, loading, queryString, filters.page, load]);
+  }, [infinite, data, visiblePages]);
 
-  const jobs = useMemo(() => [...(data?.jobs ?? []), ...extraPages], [data, extraPages]);
+  const jobs = useMemo(() => {
+    if (!data || !dataset) return [];
+    if (!infinite) return data.jobs;
+    const extended = searchJobs(
+      dataset,
+      { ...filters, page: 1, pageSize: (filters.pageSize ?? 25) * visiblePages },
+      { lastIngestAt: generatedAt },
+    );
+    return extended.jobs;
+  }, [data, dataset, infinite, filters, visiblePages, generatedAt]);
 
-  const lastUpdated = data?.meta.lastIngestAt
-    ? new Date(data.meta.lastIngestAt).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' })
+  const lastUpdated = generatedAt
+    ? new Date(generatedAt).toLocaleString('en-CA', { dateStyle: 'medium', timeStyle: 'short' })
     : null;
 
   return (
@@ -206,7 +215,7 @@ export function JobBrowser() {
                   checked={infinite}
                   onChange={(e) => {
                     setInfinite(e.target.checked);
-                    setExtraPages([]);
+                    setVisiblePages(1);
                   }}
                 />
                 Infinite scroll
@@ -217,7 +226,7 @@ export function JobBrowser() {
           {error ? (
             <div className="card border-warn/40 p-4 text-sm text-warn">
               {error}
-              <button type="button" className="btn ml-3" onClick={() => void load(queryString)}>
+              <button type="button" className="btn ml-3" onClick={() => window.location.reload()}>
                 Retry
               </button>
             </div>

@@ -4,7 +4,7 @@ import { ALL_SOURCES } from '@/lib/sources/registry';
 import { config } from '@/lib/config';
 
 export const metadata: Metadata = { title: 'Sources & how this works' };
-export const dynamic = 'force-dynamic';
+
 
 const NOT_INDEXED = [
   {
@@ -29,10 +29,12 @@ export default function AboutPage() {
       <section className="card p-6">
         <h1 className="text-xl font-semibold">How {config.appName} works</h1>
         <p className="mt-3 text-sm leading-relaxed">
-          Every few hours a scheduled job calls each connector below, pulls the current postings, normalises them into a
+          Every hour a GitHub Action calls each connector below, pulls the current postings, normalises them into a
           single schema, filters out anything that is not a cybersecurity or credible cyber-pathway role, removes
-          duplicates across sources, extracts skills, certifications and salary, and ranks the result. The site reads
-          from that store, so what you see is live data rather than a static snapshot.
+          duplicates across sources, extracts skills, certifications and salary, ranks the result, and rebuilds this
+          site around it. There is no server and no database: the whole job set ships as a JSON file, which is why
+          searching and filtering are instant — they run in your browser, not over the network. The timestamp on the
+          search page tells you exactly how old the data is.
         </p>
         <ul className="mt-4 space-y-1.5 text-sm">
           <li>

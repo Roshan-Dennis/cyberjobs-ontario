@@ -1,0 +1,84 @@
+name: Publish to GitHub Pages
+
+# Collects fresh postings, builds the static site and publishes it.
+#
+# This is the whole production pipeline. There is no server, no database and no
+# third-party account involved — the job data is a JSON file baked into the site
+# on every run.
+
+on:
+  schedule:
+    # Hourly, at :19 — off the hour on purpose, since scheduled workflows queue
+    # behind everyone else's :00 jobs and GitHub delays them under load.
+    - cron: '19 * * * *'
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Comma-separated source ids (blank = all)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never publish two builds at once, but let a running build finish rather than
+# cancelling it — a cancelled run would leave the site on older data.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Collect job data
+        run: npm run data -- --budget 900000 ${{ github.event.inputs.only && format('--only {0}', github.event.inputs.only) || '' }}
+        env:
+          # Optional connectors — the site works without them.
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          JOOBLE_API_KEY: ${{ secrets.JOOBLE_API_KEY }}
+          CRAWLER_CONTACT: ${{ vars.CRAWLER_CONTACT || github.server_url }}/${{ github.repository }}
+
+      - name: Build static site
+        run: npm run build:static
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          NEXT_PUBLIC_SITE_URL: ${{ vars.SITE_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}
+          # Set the repository variable BASE_PATH to "" if you move this to a
+          # custom domain or a <user>.github.io repository.
+          NEXT_PUBLIC_BASE_PATH: ${{ vars.BASE_PATH != null && vars.BASE_PATH || format('/{0}', github.event.repository.name) }}
+
+      - name: Report what was published
+        run: |
+          echo "### Published $(node -p "require('./public/data/jobs.json').jobs.length") postings" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          node -p "require('./public/data/jobs.json').sources.map(s=>\`\${s.id.padEnd(16)} fetched \${String(s.fetched).padStart(5)}  kept \${String(s.kept).padStart(4)}\`).join('\n')" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

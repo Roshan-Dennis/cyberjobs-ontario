@@ -1,14 +1,22 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { getStore } from '@/lib/store';
+import { findJob, readSnapshot } from '@/lib/snapshot';
 import { relativeTime } from '@/lib/normalize/dates';
 import { formatSalary } from '@/lib/normalize/salary';
 import { CATEGORY_LABELS, EMPLOYMENT_LABELS, EXPERIENCE_LABELS } from '@/lib/types';
 import { SaveButton } from '@/components/SaveButton';
 import { MarkViewed } from '@/components/MarkViewed';
 
-export const dynamic = 'force-dynamic';
+// Prerender one page per posting. `dynamicParams = false` makes an unknown id
+// render the 404 page instead of attempting a server render, which is what the
+// static export needs — there is no server to fall back to.
+export const dynamicParams = false;
+
+export async function generateStaticParams(): Promise<{ id: string }[]> {
+  const { jobs } = await readSnapshot();
+  return jobs.map((job) => ({ id: job.id }));
+}
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -17,7 +25,7 @@ interface Props {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   try {
-    const job = await getStore().getJob(id);
+    const job = await findJob(id);
     if (!job) return { title: 'Job not found' };
     return {
       title: `${job.title} — ${job.company}`,
@@ -53,7 +61,7 @@ function TagList({ items, tone = 'default' }: { items: string[]; tone?: 'default
 
 export default async function JobPage({ params }: Props) {
   const { id } = await params;
-  const job = await getStore().getJob(id);
+  const job = await findJob(id);
   if (!job) notFound();
 
   const salary = formatSalary(job.salary);

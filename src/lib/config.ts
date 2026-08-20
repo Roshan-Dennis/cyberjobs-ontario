@@ -33,7 +33,6 @@ export const config = {
     },
   },
 
-  cronSecret: process.env.CRON_SECRET ?? '',
 
   /** Contact address advertised in the crawler User-Agent, per good-citizen practice. */
   crawlerContact: process.env.CRAWLER_CONTACT ?? 'https://github.com/Roshan-Dennis/cyberjobs-ontario',

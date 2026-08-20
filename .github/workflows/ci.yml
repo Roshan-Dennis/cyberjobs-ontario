@@ -37,33 +37,17 @@ jobs:
       - name: Pipeline self-test
         run: npm run selftest
 
+      # Compile-and-typecheck build. The static *export* needs a job snapshot to
+      # prerender one page per posting, and Next refuses `output: export` when
+      # generateStaticParams comes back empty — so exercising that path here
+      # would mean either a network call or committed placeholder job data.
+      # Neither is worth it: pages.yml runs the real export on every push to
+      # main a minute later, and goes red just as loudly if it breaks.
       - name: Build
         run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: '1'
 
-  connectors:
-    name: Smoke-test live connectors
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # Only on main / manual runs: this hits real third-party APIs.
-    if: github.event_name != 'pull_request'
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - run: npm ci
-
-      # jobbank is deliberately excluded. Job Bank blocks GitHub Actions runner
-      # IPs — every request answers 503 from here — so including it tests
-      # nothing and costs the source its full time budget. Verify that
-      # connector from a deployed environment via /api/cron/ingest instead.
-      - name: Dry-run ingest (no writes)
-        run: npm run ingest -- --dry-run --only greenhouse,lever,ashby,workday --budget 420000
-        env:
-          NEXT_TELEMETRY_DISABLED: '1'
+# The live-connector check lives in pages.yml: every scheduled publish runs a
+# real ingest and prints the per-source counts to the run summary, so there is
+# no reason to hammer the same third-party APIs a second time from here.

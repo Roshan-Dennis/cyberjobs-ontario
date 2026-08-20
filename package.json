@@ -16,7 +16,10 @@
     "ingest": "tsx scripts/ingest.ts",
     "ingest:dry": "tsx scripts/ingest.ts --dry-run",
     "sources": "tsx scripts/list-sources.ts",
-    "selftest": "tsx scripts/selftest.ts"
+    "selftest": "tsx scripts/selftest.ts",
+    "data": "tsx scripts/build-data.ts",
+    "build:static": "STATIC_EXPORT=1 next build",
+    "publish": "npm run data && npm run build:static"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
