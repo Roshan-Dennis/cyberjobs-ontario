@@ -142,13 +142,11 @@ body {
 
   /* Native date inputs render a light-mode calendar glyph on dark backgrounds.
      `color-scheme` fixes the popup; the filter fixes the icon itself. */
-  /* The sidebar column is ~118px wide; the default input padding clips
-     "mm/dd/yyyy" and the picker glyph, so date fields run tighter. */
+  /* Leave the native field at its default metrics. Shrinking the font to fit a
+     narrow column makes Chrome collapse the month segment to dashes
+     ("dd-----yyyy"), so the From/To fields are stacked full-width instead. */
   .input[type='date'] {
-    @apply cursor-pointer px-2 py-1.5 text-xs;
-  }
-  .input[type='date']::-webkit-calendar-picker-indicator {
-    @apply ml-0 shrink-0;
+    @apply cursor-pointer;
   }
   .dark .input[type='date'] {
     color-scheme: dark;
