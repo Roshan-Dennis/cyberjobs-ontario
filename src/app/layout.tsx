@@ -22,9 +22,11 @@ export const metadata: Metadata = {
   // metadataBase makes og:image resolve to an absolute URL, which every link
   // preview (LinkedIn, Slack, iMessage) requires — a relative path is ignored.
   metadataBase: new URL(config.siteUrl),
+  // LinkedIn's Post Inspector warns below 100 characters, so the share
+  // description is written long enough to clear that bar.
   openGraph: {
     title: `${config.appName} — cybersecurity jobs across Ontario`,
-    description: 'Live cybersecurity job postings across Ontario and remote Canada, refreshed hourly.',
+    description: 'Live cybersecurity job postings across Ontario and remote Canada — collected hourly from employer career APIs and the federal Job Bank, deduplicated and filterable by certification, tool and seniority.',
     type: 'website',
     locale: 'en_CA',
     siteName: config.appName,
@@ -33,7 +35,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: `${config.appName} — cybersecurity jobs across Ontario`,
-    description: 'Live cybersecurity job postings across Ontario and remote Canada, refreshed hourly.',
+    description: 'Live cybersecurity job postings across Ontario and remote Canada — collected hourly from employer career APIs and the federal Job Bank, deduplicated and filterable by certification, tool and seniority.',
     images: ['/og.png'],
   },
   alternates: { canonical: '/' },
