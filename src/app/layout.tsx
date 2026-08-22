@@ -19,11 +19,24 @@ export const metadata: Metadata = {
     'GRC jobs Ontario',
     'penetration tester Canada',
   ],
+  // metadataBase makes og:image resolve to an absolute URL, which every link
+  // preview (LinkedIn, Slack, iMessage) requires — a relative path is ignored.
+  metadataBase: new URL(config.siteUrl),
   openGraph: {
-    title: `${config.appName}`,
-    description: 'Live cybersecurity job postings across Ontario and remote Canada.',
+    title: `${config.appName} — cybersecurity jobs across Ontario`,
+    description: 'Live cybersecurity job postings across Ontario and remote Canada, refreshed hourly.',
     type: 'website',
+    locale: 'en_CA',
+    siteName: config.appName,
+    images: [{ url: '/og.png', width: 1200, height: 630, alt: `${config.appName} — cybersecurity jobs across Ontario and remote Canada` }],
   },
+  twitter: {
+    card: 'summary_large_image',
+    title: `${config.appName} — cybersecurity jobs across Ontario`,
+    description: 'Live cybersecurity job postings across Ontario and remote Canada, refreshed hourly.',
+    images: ['/og.png'],
+  },
+  alternates: { canonical: '/' },
   robots: { index: true, follow: true },
 };
 
@@ -54,7 +67,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-screen">
         <header className="sticky top-0 z-40 border-b border-line bg-surface/85 backdrop-blur">
           <div className="mx-auto flex max-w-7xl items-center gap-3 px-4 py-3">
-            <Link href="/" className="group flex items-center gap-2.5 font-semibold tracking-tight">
+            <Link
+              href="/"
+              aria-label={`${config.appName} — home`}
+              className="group flex items-center gap-2.5 font-semibold tracking-tight"
+            >
               {/* Cyan mark, ink wordmark: the accent identifies the product
                   without competing with the blue used for actions. */}
               <span
@@ -70,7 +87,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </Link>
 
             <nav className="ml-auto flex items-center gap-1 text-sm">
-              <Link href="/" className="btn btn-ghost">
+              <Link href="/" className="btn btn-ghost hidden sm:inline-flex">
                 Jobs
               </Link>
               <Link href="/dashboard" className="btn btn-ghost">
@@ -79,7 +96,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/saved" className="btn btn-ghost">
                 Saved
               </Link>
-              <Link href="/about" className="btn btn-ghost hidden md:inline-flex">
+              <Link href="/about" className="btn btn-ghost">
                 Sources
               </Link>
               <ThemeToggle />

@@ -61,7 +61,7 @@ export function DashboardClient() {
     return (
       <div className="space-y-3">
         <div className="card h-24 animate-pulse bg-surface2" />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
             // eslint-disable-next-line react/no-array-index-key
             <div key={i} className="card h-24 animate-pulse bg-surface2" />
@@ -91,7 +91,7 @@ export function DashboardClient() {
         </p>
       </section>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Open postings" value={live.length} hint={`${jobs.length - live.length} marked expired`} />
         <Stat label="Posted today" value={within(1)} hint={`${within(7)} in the last 7 days`} />
         <Stat label="Employers" value={new Set(live.map((j) => j.companySlug)).size} />

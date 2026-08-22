@@ -26,13 +26,18 @@ function Section({
   children,
   defaultOpen = true,
   count,
+  empty = false,
 }: {
   title: string;
   children: React.ReactNode;
   defaultOpen?: boolean;
   count?: number;
+  empty?: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  // A group with no options and nothing selected cannot be acted on, so it is
+  // dropped entirely rather than rendered as a row of "No options".
+  if (empty) return null;
   // Each filter group is its own bordered card. Grouping by outline rather than
   // by divider line means a long sidebar still parses as discrete choices
   // instead of one continuous wall of checkboxes.
@@ -194,7 +199,7 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
         </div>
       </Section>
 
-      <Section title="Experience level" count={filters.experience?.length}>
+      <Section title="Experience level" count={filters.experience?.length} empty={experienceFacets.length === 0}>
         <CheckList
           facets={experienceFacets}
           selected={filters.experience ?? []}
@@ -203,27 +208,27 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
         />
       </Section>
 
-      <Section title="Work arrangement" count={filters.arrangement?.length}>
+      <Section title="Work arrangement" count={filters.arrangement?.length} empty={(facets?.arrangement ?? []).length === 0}>
         <CheckList facets={facets?.arrangement ?? []} selected={filters.arrangement ?? []} onToggle={toggler('arrangement')} limit={6} />
       </Section>
 
-      <Section title="Job category" count={filters.categories?.length}>
+      <Section title="Job category" count={filters.categories?.length} empty={(facets?.categories ?? []).length === 0}>
         <CheckList facets={facets?.categories ?? []} selected={filters.categories ?? []} onToggle={toggler('categories')} limit={10} />
       </Section>
 
-      <Section title="Location" count={filters.cities?.length}>
+      <Section title="Location" count={filters.cities?.length} empty={(facets?.cities ?? []).length === 0}>
         <CheckList facets={facets?.cities ?? []} selected={filters.cities ?? []} onToggle={toggler('cities')} limit={10} />
       </Section>
 
-      <Section title="Employment type" count={filters.employment?.length} defaultOpen={false}>
+      <Section title="Employment type" count={filters.employment?.length} defaultOpen={false} empty={(facets?.employment ?? []).length === 0}>
         <CheckList facets={facets?.employment ?? []} selected={filters.employment ?? []} onToggle={toggler('employment')} limit={8} />
       </Section>
 
-      <Section title="Company" count={filters.companies?.length} defaultOpen={false}>
+      <Section title="Company" count={filters.companies?.length} defaultOpen={false} empty={(facets?.companies ?? []).length === 0}>
         <CheckList facets={facets?.companies ?? []} selected={filters.companies ?? []} onToggle={toggler('companies')} limit={10} />
       </Section>
 
-      <Section title="Certifications" count={filters.certifications?.length} defaultOpen={false}>
+      <Section title="Certifications" count={filters.certifications?.length} defaultOpen={false} empty={(facets?.certifications ?? []).length === 0}>
         <CheckList
           facets={facets?.certifications ?? []}
           selected={filters.certifications ?? []}
@@ -233,7 +238,7 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
         />
       </Section>
 
-      <Section title="Skills & tools" count={filters.skills?.length} defaultOpen={false}>
+      <Section title="Skills & tools" count={filters.skills?.length} defaultOpen={false} empty={(facets?.skills ?? []).length === 0}>
         <CheckList facets={facets?.skills ?? []} selected={filters.skills ?? []} onToggle={toggler('skills')} limit={12} />
       </Section>
 
@@ -261,7 +266,7 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
         </label>
       </Section>
 
-      <Section title="Source" count={filters.sources?.length} defaultOpen={false}>
+      <Section title="Source" count={filters.sources?.length} defaultOpen={false} empty={(facets?.sources ?? []).length === 0}>
         <CheckList facets={facets?.sources ?? []} selected={filters.sources ?? []} onToggle={toggler('sources')} limit={12} />
       </Section>
 

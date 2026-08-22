@@ -136,8 +136,10 @@ body {
     @apply text-xs font-semibold uppercase tracking-wide text-muted;
   }
 
+  /* Underlined by default: inside a paragraph, colour alone is not a
+     sufficient cue that text is a link. */
   .link {
-    @apply text-brand underline-offset-2 hover:underline;
+    @apply text-brand underline underline-offset-2 hover:no-underline;
   }
 
   /* Native date inputs render a light-mode calendar glyph on dark backgrounds.

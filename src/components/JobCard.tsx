@@ -28,7 +28,7 @@ export function JobCard({ job, onTagClick }: { job: Job; onTagClick?: (tech: str
         <CompanyAvatar company={job.company} />
 
         <div className="min-w-0 flex-1">
-          <div className="flex items-start gap-3">
+          <div className="flex flex-col-reverse gap-1 sm:flex-row sm:items-start sm:gap-3">
             <div className="min-w-0 flex-1">
               <h3 className="text-base font-semibold leading-snug">
                 {/* Stretched link: the whole card is the target, but nested
@@ -43,7 +43,7 @@ export function JobCard({ job, onTagClick }: { job: Job; onTagClick?: (tech: str
               </p>
             </div>
 
-            <div className="flex shrink-0 flex-col items-end gap-1.5 text-right">
+            <div className="flex shrink-0 flex-wrap items-baseline gap-x-2 sm:flex-col sm:items-end sm:gap-1.5 sm:text-right">
               <span className="text-xs text-muted">{relativeTime(job.postedAt)}</span>
               {salary ? <span className="text-sm font-semibold text-good">{salary}</span> : null}
             </div>
