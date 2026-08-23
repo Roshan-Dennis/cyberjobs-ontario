@@ -371,6 +371,8 @@ export interface GeoMatch {
   isOntario: boolean;
   isCanada: boolean;
   isRemote: boolean;
+  /** The location field names a place outside Canada and no Canadian one. */
+  isForeign: boolean;
 }
 
 const REMOTE_RE = /\b(remote|work\s*from\s*home|wfh|telecommute|distributed|anywhere|virtual)\b/i;
@@ -424,6 +426,7 @@ export function matchLocation(raw: string | null | undefined): GeoMatch {
       isOntario: false,
       isCanada: false,
       isRemote,
+      isForeign: true,
     };
   }
 
@@ -442,7 +445,7 @@ export function matchLocation(raw: string | null | undefined): GeoMatch {
   else if (US_MARKERS.test(lower) || US_STATE_CODES.test(lower)) country = 'United States';
   else if (text) country = null;
 
-  return { city, region, country, isOntario, isCanada, isRemote };
+  return { city, region, country, isOntario, isCanada, isRemote, isForeign: false };
 }
 
 export function detectHybrid(text: string): boolean {

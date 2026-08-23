@@ -109,6 +109,36 @@ for (const [raw, expected] of GEO_CASES) {
   check(`${raw} -> ${expected ? 'Canada' : 'foreign'}`, m.isCanada === expected, `${m.city} / ${m.country}`);
 }
 
+// A US-only posting that happens to say "Canada" in boilerplate must not pass
+// as remote-Canada. This is how a Plaid role listing New York, Seattle,
+// Raleigh and San Francisco reached the board.
+const usBoilerplate = normalizeJob(
+  raw({
+    title: 'Security Engineer',
+    locationRaw: 'New York City Office / Seattle Office / Raleigh Office / San Francisco HQ',
+    description: 'Remote-friendly role. We run threat detection and incident response. Our payroll operates across the US and Canada.',
+  }),
+);
+check('US-only posting citing Canada in prose rejected', usBoilerplate.job === null, usBoilerplate.reason);
+
+const trueRemoteCanada = normalizeJob(
+  raw({
+    title: 'Security Engineer',
+    locationRaw: 'Remote',
+    description: 'This role is remote anywhere in Canada. You will run threat detection, incident response and SIEM tuning.',
+  }),
+);
+check('Genuine remote-Canada posting kept', trueRemoteCanada.job !== null, trueRemoteCanada.reason);
+
+const foreignBeatsProse = normalizeJob(
+  raw({
+    title: 'Security Engineer',
+    locationRaw: 'London, UK',
+    description: 'Remote within Canada is available for the right candidate. SIEM and incident response.',
+  }),
+);
+check('Foreign location field beats remote-Canada prose', foreignBeatsProse.job === null, foreignBeatsProse.reason);
+
 const ukJob = normalizeJob(raw({ title: 'Security Engineer', locationRaw: 'London, UK', description: 'SIEM, incident response, threat detection across the estate.' }));
 check('London UK posting rejected outright', ukJob.job === null, ukJob.reason);
 
@@ -388,12 +418,17 @@ const carriedBad = [
   mk('uk-1', { locationRaw: 'London, UK', city: 'London', region: 'Southwestern Ontario' }),
   mk('uk-2', { locationRaw: 'Hybrid - San Francisco, New York City, London, Berlin', city: 'London', region: 'Southwestern Ontario' }),
   mk('good-1', { locationRaw: 'Toronto, ON', city: 'Toronto', region: 'Greater Toronto Area' }),
-  mk('good-2', { locationRaw: 'Remote - Canada', city: null, region: null }),
+  mk('good-2', { locationRaw: 'Remote - Canada', city: null, region: null, workArrangement: 'remote' }),
 ];
 const rev = revalidate(carriedBad);
 check('Foreign carried postings dropped', rev.dropped === 2, rev.dropped);
 check('Canadian carried postings kept', rev.jobs.length === 2, rev.jobs.length);
 check('Kept the right ones', rev.jobs.map((j) => j.id).join(',') === 'good-1,good-2', rev.jobs.map((j) => j.id));
+
+// Carried postings face the same gate as fresh ones: Canadian but neither in
+// Ontario nor remote is out.
+const carriedOffside = revalidate([mk('bc', { locationRaw: 'Vancouver, BC', city: null, region: null, workArrangement: 'onsite' })]);
+check('Carried non-Ontario on-site posting dropped', carriedOffside.dropped === 1, carriedOffside.dropped);
 
 const healed = revalidate([mk('h', { locationRaw: 'Ottawa, ON', city: 'Tornto', region: 'Wrong' })]);
 check('Stale city corrected in place', healed.jobs[0]?.city === 'Ottawa', healed.jobs[0]?.city);

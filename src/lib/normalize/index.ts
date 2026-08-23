@@ -62,11 +62,20 @@ export function normalizeJob(raw: RawJob, opts: NormalizeOptions = DEFAULT_NORMA
   else if (remote) arrangement = 'remote';
   else if (geo.city) arrangement = 'onsite';
 
-  const isRemoteCanada = arrangement === 'remote' && (geo.isCanada || /\bcanada\b/i.test(locationText));
+  // A bare mention of "Canada" anywhere in the description is not evidence that
+  // a role is open to Canada — plenty of US-only postings say "the US and
+  // Canada" in boilerplate. A Plaid role listing New York, Seattle, Raleigh and
+  // San Francisco got in that way. Require the location field to say Canada, or
+  // the text to tie remote and Canada together explicitly.
+  const REMOTE_CANADA_RE =
+    /\b(remote|work\s*from\s*home|distributed|hybrid)\b[^.!?]{0,60}\bcanada\b|\bcanada\b[^.!?]{0,60}\b(remote|work\s*from\s*home|distributed)\b|\banywhere in canada\b|\bcanada[-\s]based\b/i;
+  const isRemoteCanada =
+    arrangement === 'remote' && (geo.isCanada || REMOTE_CANADA_RE.test(locationText));
 
-  // Geography gate.
+  // Geography gate. A location field that names somewhere outside Canada is
+  // decisive: the description cannot argue it back in.
   if (!geo.isOntario) {
-    if (!(opts.allowRemoteCanada && isRemoteCanada)) {
+    if (geo.isForeign || !(opts.allowRemoteCanada && isRemoteCanada)) {
       return { job: null, reason: `outside Ontario (${raw.locationRaw || 'no location'})` };
     }
   }

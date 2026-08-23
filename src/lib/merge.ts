@@ -32,7 +32,10 @@ export function revalidate(jobs: Job[]): { jobs: Job[]; dropped: number } {
   let dropped = 0;
   for (const job of jobs) {
     const geo = matchLocation(job.locationRaw);
-    if (!geo.isCanada) {
+    // Same gate the ingest applies: in Ontario, or genuinely remote-Canada, and
+    // never a location field that names somewhere outside Canada.
+    const remoteCanada = job.workArrangement === 'remote' && geo.isCanada;
+    if (geo.isForeign || !(geo.isOntario || remoteCanada)) {
       dropped += 1;
       continue;
     }
