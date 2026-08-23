@@ -1,3 +1,4 @@
+import { matchLocation, regionForCity } from '@/lib/taxonomy/ontario';
 import type { Job } from '@/lib/types';
 
 /**
@@ -13,6 +14,37 @@ import type { Job } from '@/lib/types';
  * ("keep everything seen in the last N days") instead of an accident of how far
  * back each source's feed happens to reach.
  */
+
+/**
+ * Re-check carried-forward postings against the current rules.
+ *
+ * Carry-forward has a sharp edge: a posting admitted under yesterday's rules
+ * keeps its place for the whole retention window, so a classification fix does
+ * not reach the postings already published. That is how "London, UK" survived
+ * the geo fix — the records came from the previous snapshot, not from the
+ * connectors, so nothing re-examined them.
+ *
+ * Re-running the geo match on the stored `locationRaw` heals those records in
+ * place: the fix applies on the next run instead of waiting out expiry.
+ */
+export function revalidate(jobs: Job[]): { jobs: Job[]; dropped: number } {
+  const kept: Job[] = [];
+  let dropped = 0;
+  for (const job of jobs) {
+    const geo = matchLocation(job.locationRaw);
+    if (!geo.isCanada) {
+      dropped += 1;
+      continue;
+    }
+    // Heal city/region too, so a gazetteer correction shows up immediately.
+    kept.push(
+      geo.city === job.city && geo.region === job.region
+        ? job
+        : { ...job, city: geo.city, region: geo.region ?? regionForCity(geo.city), isOntario: geo.isOntario, isCanada: geo.isCanada },
+    );
+  }
+  return { jobs: kept, dropped };
+}
 
 export interface MergeOptions {
   /** Drop a posting this many days after the last time a source returned it. */

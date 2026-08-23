@@ -16,7 +16,7 @@ import { matchLocation } from '../src/lib/taxonomy/ontario';
 import { normalizeTitle, inferExperienceLevel } from '../src/lib/taxonomy/titles';
 import { buildDeepLinks } from '../src/lib/deeplinks';
 import { decodeEscapedHtml } from '../src/lib/normalize/html';
-import { mergeSnapshots, sanityCheck } from '../src/lib/merge';
+import { mergeSnapshots, revalidate, sanityCheck } from '../src/lib/merge';
 import { TOKENS as JOBBANK_TOKENS, parseFeed as parseJobBankFeed } from '../src/lib/sources/jobbank';
 import { activeSources } from '../src/lib/sources/registry';
 import type { RawJob } from '../src/lib/types';
@@ -379,6 +379,26 @@ check('Sanity check blocks an empty merge', sanityCheck(70, 0) !== null);
 check('Sanity check blocks a mass disappearance', sanityCheck(70, 20) !== null);
 check('Sanity check tolerates small datasets', sanityCheck(5, 3) === null);
 
+/* ------------------------------------------------------------------ */
+section('Carried-forward postings are re-checked');
+
+// Carry-forward let "London, UK" outlive the geo fix: those records came from
+// the previous snapshot, so nothing re-examined them. Revalidation closes that.
+const carriedBad = [
+  mk('uk-1', { locationRaw: 'London, UK', city: 'London', region: 'Southwestern Ontario' }),
+  mk('uk-2', { locationRaw: 'Hybrid - San Francisco, New York City, London, Berlin', city: 'London', region: 'Southwestern Ontario' }),
+  mk('good-1', { locationRaw: 'Toronto, ON', city: 'Toronto', region: 'Greater Toronto Area' }),
+  mk('good-2', { locationRaw: 'Remote - Canada', city: null, region: null }),
+];
+const rev = revalidate(carriedBad);
+check('Foreign carried postings dropped', rev.dropped === 2, rev.dropped);
+check('Canadian carried postings kept', rev.jobs.length === 2, rev.jobs.length);
+check('Kept the right ones', rev.jobs.map((j) => j.id).join(',') === 'good-1,good-2', rev.jobs.map((j) => j.id));
+
+const healed = revalidate([mk('h', { locationRaw: 'Ottawa, ON', city: 'Tornto', region: 'Wrong' })]);
+check('Stale city corrected in place', healed.jobs[0]?.city === 'Ottawa', healed.jobs[0]?.city);
+
+/* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
 section('Search, filters and facets');
 

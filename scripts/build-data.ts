@@ -20,7 +20,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { runIngest } from '../src/lib/ingest';
 import { config } from '../src/lib/config';
-import { mergeSnapshots, sanityCheck } from '../src/lib/merge';
+import { mergeSnapshots, revalidate, sanityCheck } from '../src/lib/merge';
 import type { Job } from '../src/lib/types';
 
 /** How much description text to ship to the browser, per job. */
@@ -88,7 +88,14 @@ async function main(): Promise<void> {
   // Carry forward. Without this a single failing connector removes its share of
   // the site until the next hour — Greenhouse alone is half the dataset.
   const previousUrl = arg('previous') ?? config.ingest.previousSnapshotUrl;
-  const previous = await loadPrevious(previousUrl);
+  const loaded = await loadPrevious(previousUrl);
+  // Re-check the baseline against today's rules before merging, so a
+  // classification fix reaches postings that are only being carried forward.
+  const revalidated = revalidate(loaded);
+  if (revalidated.dropped > 0) {
+    console.log(`  revalidated baseline: dropped ${revalidated.dropped} no longer passing the geo filter`);
+  }
+  const previous = revalidated.jobs;
   const merge = mergeSnapshots(previous, jobs, {
     retentionDays: config.ingest.retentionDays,
     staleDays: config.ingest.staleDays,
