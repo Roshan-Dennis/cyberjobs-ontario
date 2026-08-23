@@ -77,6 +77,42 @@ check('New York is neither', (() => {
 })(), matchLocation('New York, NY, United States'));
 
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+section('Foreign places that share an Ontario name');
+
+// Reported from the wild: a quarter of the published board was "London, UK"
+// showing as London, Ontario. Ontario borrows a lot of British place names, so
+// each of these needs a positive Canadian signal before it counts.
+const GEO_CASES: [string, boolean][] = [
+  ['London, UK', false],
+  ['London, ON', true],
+  ['London, Ontario', true],
+  ['Hybrid - San Francisco, New York City, London, Berlin', false],
+  ['Cambridge, UK', false],
+  ['Cambridge, ON', true],
+  ['Cambridge, MA', false],
+  ['Kingston, Jamaica', false],
+  ['Kingston, Ontario', true],
+  ['Hamilton, New Zealand', false],
+  ['Waterloo, Belgium', false],
+  ['Waterloo, Ontario, Canada', true],
+  ['Windsor, England', false],
+  ['Bengaluru, India', false],
+  ['Dublin, Ireland', false],
+  ['Sydney, Australia', false],
+  ['Remote (US)', false],
+  ['Toronto', true],
+  ['Remote - Canada', true],
+];
+for (const [raw, expected] of GEO_CASES) {
+  const m = matchLocation(raw);
+  check(`${raw} -> ${expected ? 'Canada' : 'foreign'}`, m.isCanada === expected, `${m.city} / ${m.country}`);
+}
+
+const ukJob = normalizeJob(raw({ title: 'Security Engineer', locationRaw: 'London, UK', description: 'SIEM, incident response, threat detection across the estate.' }));
+check('London UK posting rejected outright', ukJob.job === null, ukJob.reason);
+
+/* ------------------------------------------------------------------ */
 section('Title normalisation and seniority');
 
 check('Sr. -> Senior', normalizeTitle('Sr. Cyber Security Analyst').startsWith('Senior'));

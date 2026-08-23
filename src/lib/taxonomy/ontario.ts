@@ -335,6 +335,35 @@ export const CANADA_MARKERS = [
 
 const CANADA_PROVINCE_CODES = /\b(on|qc|bc|ab|mb|sk|ns|nb|nl|pe|yt|nt|nu)\b/;
 
+/**
+ * Places outside Canada that a bare Ontario city name would otherwise match.
+ *
+ * Ontario is full of names borrowed from Britain — London, Cambridge, Windsor,
+ * Kingston, Stratford, Woodstock, Newmarket — so "London, UK" sailed straight
+ * through the gazetteer as London, Ontario. At one point a quarter of the board
+ * was London-UK postings. Any of these markers disqualifies the string unless a
+ * Canadian marker also appears.
+ */
+const FOREIGN_MARKERS =
+  /\b(uk|u k|united kingdom|england|scotland|wales|northern ireland|ireland|dublin|berlin|germany|munich|france|paris|netherlands|amsterdam|belgium|brussels|spain|madrid|barcelona|portugal|lisbon|italy|milan|rome|switzerland|zurich|austria|vienna|sweden|stockholm|norway|oslo|denmark|copenhagen|finland|helsinki|poland|warsaw|krakow|czech|prague|romania|bucharest|ukraine|greece|athens|turkey|istanbul|israel|tel aviv|india|bengaluru|bangalore|hyderabad|mumbai|delhi|pune|chennai|noida|gurgaon|gurugram|singapore|malaysia|kuala lumpur|philippines|manila|japan|tokyo|korea|seoul|china|shanghai|beijing|shenzhen|hong kong|taiwan|australia|sydney|melbourne|brisbane|perth|new zealand|auckland|wellington nz|south africa|johannesburg|cape town|brazil|sao paulo|argentina|buenos aires|chile|santiago|colombia|bogota|mexico|mexico city|guadalajara|costa rica|uae|dubai|abu dhabi|saudi|riyadh|qatar|doha|egypt|cairo|nigeria|lagos|kenya|nairobi)\b/;
+
+/** US signals. Kept separate so the country can be reported accurately. */
+const US_MARKERS =
+  /\b(united states|usa|u s a|u s |us only|remote us|san francisco|new york|nyc|los angeles|seattle|austin|boston|chicago|denver|atlanta|dallas|houston|miami|phoenix|portland|san diego|san jose|washington dc|bay area|silicon valley)\b/;
+const US_STATE_CODES =
+  /\b(al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy|dc)\b/;
+
+/**
+ * Ontario city names that are far better known as somewhere else. These need a
+ * positive Canadian signal in the same string before they count — a bare
+ * "London" or "Cambridge" is more likely England than Ontario.
+ */
+const AMBIGUOUS_CITIES = new Set([
+  'london', 'cambridge', 'windsor', 'kingston', 'hamilton', 'waterloo', 'stratford',
+  'woodstock', 'newmarket', 'bradford', 'chatham', 'perth', 'sarnia', 'york', 'essex',
+  'aurora', 'richmond hill', 'peterborough', 'barrie', 'guelph', 'oxford', 'dublin',
+]);
+
 export interface GeoMatch {
   city: string | null;
   region: string | null;
@@ -380,14 +409,37 @@ export function matchLocation(raw: string | null | undefined): GeoMatch {
   }
 
   const mentionsOntario = /\bontario\b/.test(lower) || /\bon\b/.test(lower) || /\bont\b/.test(lower);
-  const isOntario = Boolean(city) || mentionsOntario;
+  const mentionsCanada =
+    CANADA_MARKERS.some((m) => lower.includes(key(m))) || CANADA_PROVINCE_CODES.test(lower) || mentionsOntario;
 
-  const mentionsCanada = CANADA_MARKERS.some((m) => lower.includes(key(m))) || CANADA_PROVINCE_CODES.test(lower);
+  // A foreign marker beats a city-name match. "London, UK" and
+  // "Hybrid - San Francisco, New York City, London, Berlin" both contain an
+  // Ontario city name, and neither is in Ontario.
+  const foreign = FOREIGN_MARKERS.test(lower) || US_MARKERS.test(lower);
+  if (foreign && !mentionsCanada) {
+    return {
+      city: null,
+      region: null,
+      country: US_MARKERS.test(lower) ? 'United States' : null,
+      isOntario: false,
+      isCanada: false,
+      isRemote,
+    };
+  }
+
+  // Borrowed British names need corroboration: a bare "Cambridge" is more
+  // likely England than Ontario, so drop it unless Canada is named too.
+  if (city && !mentionsCanada && AMBIGUOUS_CITIES.has(key(city))) {
+    city = null;
+    region = null;
+  }
+
+  const isOntario = Boolean(city) || mentionsOntario;
   const isCanada = isOntario || mentionsCanada;
 
   let country: string | null = null;
   if (isCanada) country = 'Canada';
-  else if (/\b(united states|usa|u s a|us)\b/.test(lower)) country = 'United States';
+  else if (US_MARKERS.test(lower) || US_STATE_CODES.test(lower)) country = 'United States';
   else if (text) country = null;
 
   return { city, region, country, isOntario, isCanada, isRemote };
