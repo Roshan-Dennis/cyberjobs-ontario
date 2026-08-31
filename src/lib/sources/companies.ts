@@ -218,6 +218,22 @@ export const WORKDAY_TENANTS: WorkdayEntry[] = [
   { label: 'BlackBerry QNX', host: 'bb.wd3.myworkdayjobs.com', tenant: 'bb', site: 'QNX', hint: 'Ottawa/Waterloo' },
   { label: 'BlackBerry (Students)', host: 'bb.wd3.myworkdayjobs.com', tenant: 'bb', site: 'Student', hint: 'Waterloo' },
 
+  // Campus / early-talent boards. These carry the co-op, internship and new-grad
+  // postings that never appear on an employer's main career site, and they are
+  // where the board's entry-level supply actually comes from.
+  { label: 'CIBC (Students & Graduates)', host: 'cibc.wd3.myworkdayjobs.com', tenant: 'cibc', site: 'campus', hint: 'Toronto' },
+  { label: 'BMO (Campus)', host: 'bmo.wd3.myworkdayjobs.com', tenant: 'bmo', site: 'Campus', hint: 'Toronto' },
+  { label: 'TD Bank', host: 'td.wd3.myworkdayjobs.com', tenant: 'td', site: 'TD_Bank_Careers', hint: 'Toronto' },
+
+  // Ontario public sector, health and post-secondary — the employers that hire
+  // juniors and train them, rather than recruiting senior specialists.
+  { label: 'Public Health Ontario', host: 'publichealthontario.wd10.myworkdayjobs.com', tenant: 'publichealthontario', site: 'PHOCareerSite', hint: 'Toronto' },
+  { label: 'University of Waterloo', host: 'uwaterloo.wd3.myworkdayjobs.com', tenant: 'uwaterloo', site: 'uw_careers', hint: 'Waterloo' },
+  { label: 'University of Ottawa', host: 'uottawa.wd3.myworkdayjobs.com', tenant: 'uottawa', site: 'uOttawa_External_Career_Site', hint: 'Ottawa' },
+  { label: 'Algonquin College', host: 'algonquincollege.wd3.myworkdayjobs.com', tenant: 'algonquincollege', site: 'CareerOpportunities', hint: 'Ottawa' },
+  { label: 'Southlake Health', host: 'southlake.wd10.myworkdayjobs.com', tenant: 'southlake', site: 'Southlake', hint: 'Newmarket' },
+  { label: 'HOOPP', host: 'hoopp.wd3.myworkdayjobs.com', tenant: 'hoopp', site: 'HOOPP', hint: 'Toronto' },
+
   // Removed after verification — these employers are not on Workday:
   //   eSentire   -> Dayforce (can60.dayforcehcm.com), no connector yet
   //   Scotiabank  -> SuccessFactors (jobs.scotiabank.com)

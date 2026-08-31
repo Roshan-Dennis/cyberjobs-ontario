@@ -54,6 +54,18 @@ export const TOKENS = [
   'compliance',
   'helpdesk',
   'sysadmin',
+  // Entry-level coverage. Job Bank is where Ontario employers post the junior
+  // and training roles that never reach a vendor career board, but a search for
+  // "cybersecurity" rarely surfaces them — the titles say "technician" or
+  // "analyst" and the seniority lives in the posting body.
+  'junior',
+  'intern',
+  'coop',
+  'trainee',
+  'apprentice',
+  'technician',
+  'analyst',
+  'support',
 ];
 
 function buildQueries(): Query[] {

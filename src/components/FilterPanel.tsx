@@ -129,10 +129,15 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
     (filters.onlyPathway ? 1 : 0) +
     (filters.includeExpired ? 1 : 0);
 
-  const experienceFacets: Facet[] = EXPERIENCE_LEVELS.map((level) => {
-    const found = facets?.experience.find((f) => f.value === level);
-    return { value: level, label: EXPERIENCE_LABELS[level], count: found?.count ?? 0 };
-  }).filter((f) => f.count > 0 || (filters.experience ?? []).includes(f.value as never));
+  // 'unknown' is listed last rather than omitted: roughly a third of postings
+  // state no seniority, and dropping the option meant anyone filtering for
+  // junior work silently lost that third of the board.
+  const experienceFacets: Facet[] = [...EXPERIENCE_LEVELS, 'unknown' as const]
+    .map((level) => {
+      const found = facets?.experience.find((f) => f.value === level);
+      return { value: level, label: EXPERIENCE_LABELS[level], count: found?.count ?? 0 };
+    })
+    .filter((f) => f.count > 0 || (filters.experience ?? []).includes(f.value as never));
 
   return (
     <aside className="card p-3" aria-label="Filters">
