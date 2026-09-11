@@ -400,6 +400,25 @@ export const SECURITY_TITLE_SIGNALS =
  * Titles that contain the word "security" but are physical-security / guard roles.
  * These must be excluded aggressively — Job Bank in particular is full of them.
  */
+/**
+ * Guard titles that read as corporate when abbreviated.
+ *
+ * "Security Officer" passed the core-title pattern because `officer` sits in
+ * the list of security job suffixes alongside analyst and engineer. Extending
+ * coverage to BC and Alberta surfaced it immediately: Job Bank carries a lot of
+ * guard work, and three $16-to-$32-an-hour "security officer" postings from
+ * guard firms reached the published board.
+ *
+ * These titles are guards *unless* qualified by a technical word, which is what
+ * separates "Security Officer" from "Chief Information Security Officer".
+ */
+export const GUARD_TITLE_RE =
+  /\b(security|safety)\s*(officer|agent|attendant|ambassador|host|personnel|staff)\b|\bagent(e)? de s[ée]curit[ée]\b|\bgardien(ne)?\b|\bpr[ée]pos[ée] [àa] la s[ée]curit[ée]\b/i;
+
+/** Words that make a "security officer" title corporate rather than physical. */
+export const GUARD_TITLE_EXEMPTION_RE =
+  /\b(information|informatique|chief|ciso|cyber|cybers[ée]curit[ée]|it|data|donn[ée]es|network|r[ée]seau|application|cloud|infonuagique|privacy|compliance|risk|technology|digital|systems?)\b/i;
+
 export const PHYSICAL_SECURITY_EXCLUSIONS =
   /\b(security guard|guard,|loss prevention|door\s*(person|staff)|bouncer|concierge|patrol(ler|ling)?\s*(officer|guard)?|mobile patrol|alarm response|crossing guard|correctional|armoured car|armored car|store detective|asset protection (associate|officer)|security screening officer|cctv operator(?!.*analyst)|gate\s*house|site security officer|security supervisor,? (retail|mall|hospital|site)|fire\s*watch|protection officer|commissionaire)\b/i;
 

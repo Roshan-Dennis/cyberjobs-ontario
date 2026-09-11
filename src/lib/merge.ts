@@ -1,3 +1,4 @@
+import { classify } from '@/lib/normalize/relevance';
 import { matchLocation, regionForCity } from '@/lib/taxonomy/canada';
 import type { Job } from '@/lib/types';
 
@@ -26,6 +27,10 @@ import type { Job } from '@/lib/types';
  *
  * Re-running the geo match on the stored `locationRaw` heals those records in
  * place: the fix applies on the next run instead of waiting out expiry.
+ *
+ * The same argument applies to relevance, and it bit twice: tightening the
+ * guard-title rule would not have removed the "security officer" postings
+ * already on the board. So the classifier runs again here too.
  */
 export function revalidate(jobs: Job[]): { jobs: Job[]; dropped: number } {
   const kept: Job[] = [];
@@ -36,6 +41,13 @@ export function revalidate(jobs: Job[]): { jobs: Job[]; dropped: number } {
     // never a location field that names somewhere outside Canada.
     const remoteCanada = job.workArrangement === 'remote' && geo.isCanada;
     if (geo.isForeign || !(geo.isInScope || remoteCanada)) {
+      dropped += 1;
+      continue;
+    }
+
+    // Relevance is re-judged as well, so a classifier fix reaches the postings
+    // already published rather than only the next batch.
+    if (classify(job.titleRaw || job.title, job.description ?? '').rejected) {
       dropped += 1;
       continue;
     }

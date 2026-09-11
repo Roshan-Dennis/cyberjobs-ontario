@@ -22,6 +22,12 @@ export interface BoardEntry {
 /* Greenhouse: https://boards-api.greenhouse.io/v1/boards/{token}/jobs  */
 /* ------------------------------------------------------------------ */
 export const GREENHOUSE_BOARDS: BoardEntry[] = [
+  // Quebec, BC and Alberta employers, added with the four-province expansion.
+  // Verified answering at the time of adding.
+  { token: 'workleap', label: 'Workleap', hint: 'Montreal' },
+  { token: 'poka', label: 'Poka', hint: 'Quebec City' },
+  { token: 'later', label: 'Later', hint: 'Vancouver' },
+
   // Canadian / strong Ontario presence
   { token: 'hootsuite', label: 'Hootsuite' },
   { token: 'faire', label: 'Faire', hint: 'Toronto/Kitchener' },
@@ -88,6 +94,8 @@ export const GREENHOUSE_BOARDS: BoardEntry[] = [
 /* Lever: https://api.lever.co/v0/postings/{token}?mode=json           */
 /* ------------------------------------------------------------------ */
 export const LEVER_BOARDS: BoardEntry[] = [
+  { token: 'spiria', label: 'Spiria', hint: 'Montreal/Gatineau' },
+
   { token: 'palantir', label: 'Palantir' },
   { token: 'bluecatnetworks', label: 'BlueCat Networks', hint: 'Toronto' },
   { token: 'sonatype', label: 'Sonatype' },
@@ -109,6 +117,8 @@ export const LEVER_BOARDS: BoardEntry[] = [
 /* Ashby: https://api.ashbyhq.com/posting-api/job-board/{token}        */
 /* ------------------------------------------------------------------ */
 export const ASHBY_BOARDS: BoardEntry[] = [
+  { token: 'hopper', label: 'Hopper', hint: 'Montreal' },
+
   { token: 'ramp', label: 'Ramp' },
   { token: 'cohere', label: 'Cohere', hint: 'Toronto' },
   { token: 'linear', label: 'Linear' },
@@ -233,6 +243,11 @@ export const WORKDAY_TENANTS: WorkdayEntry[] = [
   { label: 'Algonquin College', host: 'algonquincollege.wd3.myworkdayjobs.com', tenant: 'algonquincollege', site: 'CareerOpportunities', hint: 'Ottawa' },
   { label: 'Southlake Health', host: 'southlake.wd10.myworkdayjobs.com', tenant: 'southlake', site: 'Southlake', hint: 'Newmarket' },
   { label: 'HOOPP', host: 'hoopp.wd3.myworkdayjobs.com', tenant: 'hoopp', site: 'HOOPP', hint: 'Toronto' },
+
+  // Quebec and BC anchors. Desjardins is the largest employer in Quebec and
+  // posts in French; UBC is a steady source of junior IT work in Vancouver.
+  { label: 'Desjardins', host: 'desjardins.wd10.myworkdayjobs.com', tenant: 'desjardins', site: 'Desjardins', hint: 'Montreal/Lévis' },
+  { label: 'University of British Columbia', host: 'ubc.wd10.myworkdayjobs.com', tenant: 'ubc', site: 'ubcstaffjobs', hint: 'Vancouver' },
 
   // Removed after verification — these employers are not on Workday:
   //   eSentire   -> Dayforce (can60.dayforcehcm.com), no connector yet

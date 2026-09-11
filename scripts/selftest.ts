@@ -13,6 +13,7 @@ import { dedupeJobs } from '../src/lib/normalize/dedupe';
 import { searchJobs } from '../src/lib/query';
 import { parseSalary } from '../src/lib/normalize/salary';
 import { matchLocation } from '../src/lib/taxonomy/canada';
+import { classify } from '../src/lib/normalize/relevance';
 import { normalizeTitle, inferExperienceLevel } from '../src/lib/taxonomy/titles';
 import { buildDeepLinks } from '../src/lib/deeplinks';
 import { decodeEscapedHtml } from '../src/lib/normalize/html';
@@ -473,6 +474,32 @@ check('Sanity check tolerates small datasets', sanityCheck(5, 3) === null);
 
 /* ------------------------------------------------------------------ */
 section('Carried-forward postings are re-checked');
+
+// Guard work that reads as corporate when abbreviated. Extending coverage to
+// BC and Alberta put three "security officer" postings from guard firms on the
+// live board, at $16 to $32 an hour.
+const GUARD_CASES: [string, boolean][] = [
+  ['security officer', false],
+  ['Security Officer', false],
+  ['Security Ambassador', false],
+  ['Safety Officer', false],
+  ['Agent de sécurité', false],
+  ['Gardien de sécurité', false],
+  ['Chief Information Security Officer', true],
+  ['Information Security Officer', true],
+  ['Cyber Security Officer', true],
+  ['IT Security Officer', true],
+  ['Agent de sécurité informatique', true],
+];
+for (const [title, keep] of GUARD_CASES) {
+  const c = classify(title, 'Monitor alerts, respond to incidents, SIEM, vulnerability management, firewall, encryption.');
+  check(`${keep ? 'kept' : 'rejected'}: ${title}`, !c.rejected === keep, c.rejectReason ?? c.category);
+}
+
+// And the carried-forward path must apply the same judgement.
+const carriedGuard = revalidate([mk('guard', { titleRaw: 'security officer', title: 'Security Officer', locationRaw: 'Kelowna (BC)', city: 'Kelowna', region: 'Okanagan' })]);
+check('Carried guard posting dropped on re-check', carriedGuard.dropped === 1, carriedGuard.dropped);
+
 
 // Carry-forward let "London, UK" outlive the geo fix: those records came from
 // the previous snapshot, so nothing re-examined them. Revalidation closes that.

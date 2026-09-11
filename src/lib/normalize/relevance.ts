@@ -2,6 +2,8 @@ import {
   CATEGORY_RULES,
   CATEGORY_RULES_FR,
   NON_TECHNICAL_EXCLUSIONS,
+  GUARD_TITLE_EXEMPTION_RE,
+  GUARD_TITLE_RE,
   PHYSICAL_SECURITY_EXCLUSIONS,
   SECURITY_TITLE_SIGNALS,
 } from '@/lib/taxonomy/cyber';
@@ -70,6 +72,11 @@ export function classify(title: string, description: string, department = ''): C
   // --- Hard rejections -------------------------------------------------
   if (PHYSICAL_SECURITY_EXCLUSIONS.test(t)) {
     return reject('Physical security / guard role');
+  }
+  // "Security Officer" and "Agent de sécurité" are guard work unless a
+  // technical word qualifies them, as in "Chief Information Security Officer".
+  if (GUARD_TITLE_RE.test(t) && !GUARD_TITLE_EXEMPTION_RE.test(t)) {
+    return reject('Physical security / guard role (title)');
   }
   if (/\bsecurity\b/i.test(t) && !CORE_TITLE_RE.test(t) && PHYSICAL_SECURITY_EXCLUSIONS.test(body.slice(0, 3000))) {
     return reject('Physical security role (body evidence)');
