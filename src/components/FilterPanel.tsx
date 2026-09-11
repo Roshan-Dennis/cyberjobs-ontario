@@ -114,6 +114,7 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
     };
 
   const activeCount =
+    (filters.provinces?.length ?? 0) +
     (filters.experience?.length ?? 0) +
     (filters.categories?.length ?? 0) +
     (filters.arrangement?.length ?? 0) +
@@ -166,6 +167,18 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
       </div>
 
       <div className="space-y-2">
+
+      {/* Province leads the sidebar: with four provinces covered it is the
+          first cut most people make, and it is the one filter whose absence
+          would make the board look wrong to someone outside Ontario. */}
+      <Section title="Province" count={filters.provinces?.length} empty={(facets?.provinces ?? []).length <= 1 && !(filters.provinces?.length ?? 0)}>
+        <CheckList
+          facets={facets?.provinces ?? []}
+          selected={filters.provinces ?? []}
+          onToggle={toggler('provinces')}
+          limit={6}
+        />
+      </Section>
 
       <Section title="Date posted">
         <div className="flex flex-wrap gap-1.5">

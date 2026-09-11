@@ -136,7 +136,7 @@ export function JobBrowser() {
   return (
     <div className="space-y-4">
       <section className="card p-4">
-        <h1 className="text-lg font-semibold tracking-tight">Cybersecurity jobs across Ontario &amp; remote Canada</h1>
+        <h1 className="text-lg font-semibold tracking-tight">Cybersecurity jobs across Ontario, Alberta, BC &amp; Quebec</h1>
         <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted/80">
           Postings collected hourly from company career-site APIs, the federal Job Bank and licensed job APIs —
           deduplicated, categorised and ranked.

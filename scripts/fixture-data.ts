@@ -32,9 +32,14 @@ const TITLES: [string, string][] = [
   ['Threat Intelligence Analyst', 'Track adversary infrastructure, produce finished intelligence, brief stakeholders. Recorded Future and MISP.'],
   ['Vulnerability Management Analyst', 'Run Tenable scans, drive remediation SLAs, report on exposure trends across 4,000 endpoints.'],
   ['OT/ICS Security Specialist', 'Protect plant control systems. IEC 62443, Claroty and network monitoring in a manufacturing environment.'],
+  // French postings, so the Quebec path is exercised in local builds too.
+  ['Analyste en cybersécurité', 'Surveillance des menaces, gestion des incidents de sécurité et des vulnérabilités. Pare-feu, chiffrement et authentification multifacteur.'],
+  ['Conseiller en sécurité de l’information', 'Gouvernance, conformité et analyse de risques. Gestion des identités et des accès pour 3000 utilisateurs.'],
+  ['Stagiaire en cybersécurité', 'Stage en surveillance et détection des intrusions au centre opérationnel de sécurité.'],
 ];
 
 const CITIES = ['Toronto, ON', 'Ottawa, ON', 'Waterloo, Ontario, Canada', 'Mississauga, ON', 'London, ON',
+  'Calgary, AB', 'Edmonton, Alberta', 'Vancouver, BC', 'Victoria, BC', 'Montréal, QC', 'Québec, QC',
   'Hamilton, Ontario', 'Kingston, ON', 'Remote - Canada', 'Markham, ON (Hybrid)', 'Windsor, Ontario'];
 const COMPANIES = ['Arctic Wolf Networks', 'BlackBerry', 'Shopify', 'Sun Life', 'Ontario Power Generation',
   'City of Ottawa', 'Bell Canada', 'Thomson Reuters', 'BMO', 'D2L', 'Cohere', 'eSentire Security Services Inc.'];

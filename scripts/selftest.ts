@@ -12,7 +12,7 @@ import { normalizeJob, DEFAULT_NORMALIZE_OPTIONS } from '../src/lib/normalize';
 import { dedupeJobs } from '../src/lib/normalize/dedupe';
 import { searchJobs } from '../src/lib/query';
 import { parseSalary } from '../src/lib/normalize/salary';
-import { matchLocation } from '../src/lib/taxonomy/ontario';
+import { matchLocation } from '../src/lib/taxonomy/canada';
 import { normalizeTitle, inferExperienceLevel } from '../src/lib/taxonomy/titles';
 import { buildDeepLinks } from '../src/lib/deeplinks';
 import { decodeEscapedHtml } from '../src/lib/normalize/html';
@@ -78,7 +78,7 @@ check('New York is neither', (() => {
 
 /* ------------------------------------------------------------------ */
 /* ------------------------------------------------------------------ */
-section('Foreign places that share an Ontario name');
+section('Foreign places that share a Canadian name');
 
 // Reported from the wild: a quarter of the published board was "London, UK"
 // showing as London, Ontario. Ontario borrows a lot of British place names, so
@@ -103,6 +103,23 @@ const GEO_CASES: [string, boolean][] = [
   ['Remote (US)', false],
   ['Toronto', true],
   ['Remote - Canada', true],
+  // Western provinces bring their own collisions: Vancouver is also in
+  // Washington State, Victoria is an Australian state, Surrey is English,
+  // Langley and Richmond are both in Virginia, Laval is in France.
+  ['Vancouver, BC', true],
+  ['Vancouver, WA', false],
+  ['Victoria, BC', true],
+  ['Victoria, Australia', false],
+  ['Surrey, BC', true],
+  ['Surrey, UK', false],
+  ['Calgary, AB', true],
+  ['Edmonton, Alberta', true],
+  ['Montréal, QC', true],
+  ['Laval, Québec', true],
+  ['Laval, France', false],
+  ['Gatineau, QC', true],
+  ['Remote - Alberta', true],
+  ['Winnipeg, MB', true],
 ];
 for (const [raw, expected] of GEO_CASES) {
   const m = matchLocation(raw);
@@ -138,6 +155,51 @@ const foreignBeatsProse = normalizeJob(
   }),
 );
 check('Foreign location field beats remote-Canada prose', foreignBeatsProse.job === null, foreignBeatsProse.reason);
+
+// The province a string resolves to, not just whether it is Canadian.
+const PROVINCE_CASES: [string, string | null][] = [
+  ['Toronto, ON', 'ON'],
+  ['Calgary, AB', 'AB'],
+  ['Vancouver, BC', 'BC'],
+  ['Montréal, QC', 'QC'],
+  ['Remote - Alberta', 'AB'],
+  ['Winnipeg, MB', null],
+  ['London, UK', null],
+];
+for (const [raw, expected] of PROVINCE_CASES) {
+  const m = matchLocation(raw);
+  check(`${raw} -> province ${expected ?? 'none'}`, m.province === expected, m.province);
+}
+
+// Manitoba is Canadian but outside coverage: in scope must be narrower than
+// in Canada, or the board silently becomes national.
+const mb = matchLocation('Winnipeg, MB');
+check('Out-of-scope province is Canadian but not in scope', mb.isCanada && !mb.isInScope, `${mb.isCanada}/${mb.isInScope}`);
+
+/* ------------------------------------------------------------------ */
+section('French-language postings');
+
+const frCases: [string, string, string][] = [
+  ['Analyste en cybersécurité', 'Montréal, QC', 'Surveillance des menaces, gestion des incidents de sécurité et des vulnérabilités. Pare-feu et chiffrement.'],
+  ['Conseiller en sécurité de l’information', 'Québec, QC', 'Gouvernance, conformité et analyse de risques. Gestion des identités et des accès.'],
+  ['Stagiaire en cybersécurité', 'Laval, Québec', 'Stage en surveillance et détection des intrusions au centre opérationnel de sécurité.'],
+];
+for (const [title, locationRaw, description] of frCases) {
+  const out = normalizeJob(raw({ title, locationRaw, description }));
+  check(`FR kept: ${title}`, out.job !== null, out.reason);
+  check(`FR categorised: ${title}`, out.job !== null && out.job.category !== 'other', out.job?.category);
+}
+const frIntern = normalizeJob(
+  raw({ title: 'Stagiaire en cybersécurité', locationRaw: 'Montréal, QC', description: 'Stage en surveillance et détection des intrusions au centre opérationnel de sécurité.' }),
+);
+check('FR internship seniority read', frIntern.job?.experienceLevel === 'internship', frIntern.job?.experienceLevel);
+
+const frGuard = normalizeJob(
+  raw({ title: 'Agent de sécurité', locationRaw: 'Montréal, QC', description: 'Surveillance des lieux, rondes et contrôle des accès du bâtiment.' }),
+);
+check('FR physical-security posting still rejected', frGuard.job === null, frGuard.job?.category);
+
+/* ------------------------------------------------------------------ */
 
 const ukJob = normalizeJob(raw({ title: 'Security Engineer', locationRaw: 'London, UK', description: 'SIEM, incident response, threat detection across the estate.' }));
 check('London UK posting rejected outright', ukJob.job === null, ukJob.reason);
@@ -425,10 +487,14 @@ check('Foreign carried postings dropped', rev.dropped === 2, rev.dropped);
 check('Canadian carried postings kept', rev.jobs.length === 2, rev.jobs.length);
 check('Kept the right ones', rev.jobs.map((j) => j.id).join(',') === 'good-1,good-2', rev.jobs.map((j) => j.id));
 
-// Carried postings face the same gate as fresh ones: Canadian but neither in
-// Ontario nor remote is out.
-const carriedOffside = revalidate([mk('bc', { locationRaw: 'Vancouver, BC', city: null, region: null, workArrangement: 'onsite' })]);
-check('Carried non-Ontario on-site posting dropped', carriedOffside.dropped === 1, carriedOffside.dropped);
+// Carried postings face the same gate as fresh ones: Canadian, but in a
+// province outside coverage and not remote, is out.
+const carriedOffside = revalidate([mk('mb', { locationRaw: 'Winnipeg, MB', city: null, region: null, workArrangement: 'onsite' })]);
+check('Carried out-of-scope on-site posting dropped', carriedOffside.dropped === 1, carriedOffside.dropped);
+
+const carriedBC = revalidate([mk('bc', { locationRaw: 'Vancouver, BC', city: null, region: null, workArrangement: 'onsite' })]);
+check('Carried BC posting kept now that BC is covered', carriedBC.dropped === 0, carriedBC.dropped);
+check('Carried BC posting gains its province', carriedBC.jobs[0]?.province === 'BC', carriedBC.jobs[0]?.province);
 
 const healed = revalidate([mk('h', { locationRaw: 'Ottawa, ON', city: 'Tornto', region: 'Wrong' })]);
 check('Stale city corrected in place', healed.jobs[0]?.city === 'Ottawa', healed.jobs[0]?.city);

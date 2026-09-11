@@ -8,6 +8,10 @@ It pulls postings from company career-site APIs, the Government of Canada Job Ba
 
 No fabricated data. No scraping of sites that forbid it. Every posting links back to the employer's own application page.
 
+**Live:** https://roshan-dennis.github.io/cyberjobs-ontario/
+
+Current scale: ~11,000 postings fetched per run across 94 verified ATS boards, 21 Workday sites and the federal Job Bank; roughly 90 survive the Ontario-and-cybersecurity filter at any time.
+
 ---
 
 ## Contents
@@ -16,6 +20,8 @@ No fabricated data. No scraping of sites that forbid it. Every posting links bac
 - [Data sources](#data-sources)
 - [Why LinkedIn, Indeed and Glassdoor are not indexed](#why-linkedin-indeed-and-glassdoor-are-not-indexed)
 - [Architecture](#architecture)
+- [How postings persist between runs](#how-postings-persist-between-runs)
+- [Geography rules](#geography-rules)
 - [Quick start](#quick-start)
 - [Deploying](#deploying)
 - [What it costs](#what-it-costs)
@@ -25,6 +31,7 @@ No fabricated data. No scraping of sites that forbid it. Every posting links bac
 - [How the classification works](#how-the-classification-works)
 - [Project layout](#project-layout)
 - [Operations](#operations)
+- [Known gaps and roadmap](#known-gaps-and-roadmap)
 - [Legal and ethical position](#legal-and-ethical-position)
 - [Licence](#licence)
 
@@ -118,11 +125,12 @@ If you have a licensed commercial feed (Adzuna paid tier, a SerpApi subscription
    │  jobbank          │             │   the search index │
    │  adzuna, jooble   │             └─────────┬──────────┘
    └───────────────────┘                       │
-                                       deploy to Pages
-                                               │
-                                               ▼
-                           Browser: fetches data/jobs.json once,
-                           then filters / sorts / facets locally
+              ▲                        deploy to Pages
+              │                                │
+              │  the previous publish is       ▼
+              │  fetched back as the      Browser: fetches data/jobs.json
+              └─ carry-forward baseline  once, then filters / sorts /
+                 (see below)             facets locally
 ```
 
 - **Framework** — Next.js 15 (App Router, React 19, TypeScript strict, Tailwind), built with `output: 'export'`.
@@ -136,6 +144,41 @@ If you have a licensed commercial feed (Adzuna paid tier, a SerpApi subscription
 ### Optional: running it with a server and database
 
 The pipeline still supports writing to Supabase Postgres (`supabase/schema.sql`, `src/lib/store/`) via `npm run ingest`, if you would rather run this as a live server-rendered app. That path is not what the published site uses and is not covered by CI.
+
+---
+
+## How postings persist between runs
+
+Each run rebuilds the site from whatever the connectors return at that moment. Left alone, that makes a bad run visible to everyone: Greenhouse is roughly half the dataset, so a single timeout would halve the board for an hour.
+
+There is no database to fall back on — but there does not need to be, because **the previously published JSON is itself the state**. Each run fetches its own last output from the live site, merges the fresh results over it, and republishes.
+
+| Behaviour | Default | Setting |
+|---|---|---|
+| A posting is dropped this long after a source last returned it | 21 days | `INGEST_RETENTION_DAYS` |
+| A posting is marked expired after this long unseen | 3 days | `INGEST_STALE_DAYS` |
+| Where the baseline is fetched from | the live site | `PREVIOUS_SNAPSHOT_URL` |
+
+Expiry is shorter than retention on purpose: a vanished posting has probably been filled, so it should grey out quickly but stay searchable for a while.
+
+Two guards make this safe:
+
+- **A sanity check refuses to publish** an empty snapshot, or one where more than half the postings disappeared at once. That pattern means a broken collector, not an empty job market.
+- **Carried postings are re-checked against current rules** before merging (`revalidate()` in `src/lib/merge.ts`). Without this, a posting admitted under yesterday's rules keeps its place for the whole retention window, so a classification fix never reaches what is already published. This was not hypothetical — see below.
+
+---
+
+## Geography rules
+
+Ontario borrows heavily from British place names: London, Cambridge, Windsor, Kingston, Stratford, Woodstock, Newmarket. The gazetteer originally matched a city name anywhere in the location string, so **"London, UK" was published as London, Ontario** — at one point 24 of 101 postings on the live site. A reader spotted it within an hour of launch.
+
+Three rules now apply, in order:
+
+1. **A foreign marker beats a city-name match.** `London, UK` and `Hybrid - San Francisco, New York City, London, Berlin` both contain an Ontario city name; neither is in Ontario.
+2. **Borrowed names need corroboration.** A bare `Cambridge` is more likely England than Ontario, so it counts only with a Canadian signal in the same string.
+3. **Remote-Canada needs real evidence.** A passing mention of "Canada" in a description is not proof a role is open to Canada — plenty of US-only postings say "the US and Canada" in boilerplate. The location field must say Canada, or the text must tie remote and Canada together in the same clause.
+
+A location field naming somewhere outside Canada is decisive: prose cannot argue it back in. Twenty geo cases are locked into the self-test.
 
 ---
 
@@ -349,7 +392,8 @@ supabase/schema.sql             optional database schema
 npm run sources                # which connectors are enabled here
 npm run data                   # collect postings and write both snapshots
 npm run data -- --only greenhouse,lever --budget 120000
-npm run selftest               # 86 assertions over the transform layer
+npm run fixture                # synthetic snapshot, so the site builds offline
+npm run selftest               # 139 assertions over the transform layer
 npm run publish                # data + static export into out/
 ```
 
@@ -364,9 +408,29 @@ visible at a glance.
 | Site shows no jobs | `npm run data` never ran, or the publish failed | Check the latest "Publish to GitHub Pages" run |
 | Publish fails with "No postings collected" | Every connector failed — usually no network | Deliberate: it refuses to publish an empty site |
 | Data stopped updating | GitHub disabled the schedule after 60 days idle | Push any commit, or re-enable the workflow |
-| Many `boards unavailable` | Companies changed ATS | Harmless; prune `companies.ts` when convenient |
-| Job Bank returns 0 | Job Bank blocks some source IPs, including GitHub Actions runners | Known — see the comment in `src/lib/sources/jobbank.ts` |
+| Many `boards unavailable` | Companies changed ATS | Harmless, but worth pruning — every dead token is an employer whose jobs are never seen. All 179 handles were verified in August 2026 and 109 were dead |
+| Job Bank returns 0 | Job Bank throttles some source IPs and answers 503. It works from the Pages runner but not from every CI runner | Expected; the circuit breaker gives up after 6 consecutive failures rather than burning the budget |
 | Assets 404 after moving to a custom domain | `basePath` still set to `/<repo>` | Set the `BASE_PATH` repository variable to an empty string |
+
+---
+
+## Known gaps and roadmap
+
+Stated plainly, because they shape what the board can and cannot tell you.
+
+**Entry-level supply is thin.** Typically 4 of ~85 open postings are co-op, entry or junior. Part of that is the real market — Ontario cybersecurity skews senior — but part is structural. The board reaches security vendors and tech companies, which recruit specialists. It reaches the employers who hire juniors and train them (colleges, hospitals, municipalities, MSPs, the provincial government) far less well, because most of them run on Dayforce, SuccessFactors, iCIMS or Taleo, and no connector exists for those yet.
+
+There is a second, subtler cause: junior roles at those employers are titled "IT Support Analyst" and never mention security, so the relevance classifier rejects them. Loosening that rule would surface more entry-level work at the cost of making this partly an IT board. That is a product decision, not a bug.
+
+**Roughly a third of postings state no seniority at all.** They are counted as "Not specified" and are selectable in the experience filter rather than hidden, since excluding them silently removed a third of the board from anyone filtering for junior work.
+
+**Coverage is bounded by the curated board list.** There is no public "list every Greenhouse board" API, so employers have to be discovered. The scaling path, in order of value per unit of effort:
+
+1. **Aggregator APIs.** The Adzuna and Jooble connectors are written and disabled, waiting on free API keys. They do web-scale crawling legally and expose it through an API — the single largest available jump in coverage, for about an hour of setup.
+2. **Automated ATS discovery.** Generate candidate tokens from company directories and probe all three ATS APIs, rather than curating by hand.
+3. **Generic career-page crawling** via embedded `JSON-LD JobPosting` data, where robots.txt permits. Technically possible, worst effort-to-yield ratio, and needs a daily job rather than an hourly one.
+
+**Geography is Ontario-only by configuration, not by architecture.** The connectors already fetch globally and discard ~99% of what they pull (about 11,000 postings fetched per run, ~90 kept). Extending to another province or country is largely a gazetteer change, not new plumbing.
 
 ---
 

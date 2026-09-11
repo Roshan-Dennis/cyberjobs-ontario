@@ -173,6 +173,9 @@ export interface Job {
   city: string | null;
   region: string | null;
   country: string | null;
+  /** Two-letter province code, when the posting resolves to one. */
+  province: 'ON' | 'AB' | 'BC' | 'QC' | null;
+  provinceName: string | null;
   isOntario: boolean;
   isCanada: boolean;
 
@@ -220,6 +223,7 @@ export interface JobFilters {
   categories?: JobCategory[];
   arrangement?: WorkArrangement[];
   employment?: EmploymentType[];
+  provinces?: string[];
   cities?: string[];
   companies?: string[];
   skills?: string[];
@@ -254,6 +258,7 @@ export interface JobSearchResult {
   pageSize: number;
   totalPages: number;
   facets: {
+    provinces: Facet[];
     categories: Facet[];
     experience: Facet[];
     arrangement: Facet[];

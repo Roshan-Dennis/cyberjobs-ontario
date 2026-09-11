@@ -260,6 +260,35 @@ interface CategoryRule {
   weight?: number;
 }
 
+/**
+ * French category rules, appended to the English ones.
+ *
+ * Matched against an accent-stripped title, so "sécurité" and "securite" both
+ * hit. Without these every Quebec posting classified as "Other", which made the
+ * category filter useless for a third of the province's roles.
+ */
+export const CATEGORY_RULES_FR: CategoryRule[] = [
+  { category: 'soc_analysis', title: /\b(analyste (en |de )?(cybersecurite|securite)|centre operationnel de securite|analyste soc)\b/i, body: /\b(centre operationnel de securite|detection des intrusions|surveillance des menaces|triage des alertes)\b/i },
+  { category: 'incident_response', title: /\b(reponse aux incidents|gestion des incidents|intervenant en incident)\b/i },
+  { category: 'threat_intelligence', title: /\b(renseignement (sur les )?menaces|veille des menaces|chasse aux menaces)\b/i },
+  { category: 'dfir', title: /\b(informatique judiciaire|criminalistique|forensique)\b/i },
+  { category: 'vulnerability_management', title: /\b(gestion des vulnerabilites|analyste (en )?vulnerabilites)\b/i },
+  { category: 'penetration_testing', title: /\b(test(s)? d intrusion|testeur d intrusion|equipe rouge|piratage ethique)\b/i },
+  { category: 'grc', title: /\b(gouvernance|conformite|audit (interne|des systemes)|gestion des risques|analyste (en )?risques|conseiller (en )?securite de l information)\b/i, body: /\b(gouvernance|conformite|analyse de risques?|politiques de securite)\b/i },
+  { category: 'iam_pam', title: /\b(gestion des (identites|acces)|identites et acces|acces privilegies)\b/i, body: /\b(gestion des (identites|acces)|authentification multifacteur)\b/i },
+  { category: 'cloud_security', title: /\b(securite (infonuagique|du nuage)|infonuagique)\b/i },
+  { category: 'application_security', title: /\b(securite (applicative|des applications)|developpement securise)\b/i },
+  { category: 'network_security', title: /\b(securite (reseau|des reseaux)|pare-feu)\b/i, body: /\b(pare-feu|segmentation reseau|vpn)\b/i },
+  { category: 'security_engineering', title: /\b(ingenieur (en )?(cybersecurite|securite)|genie de la securite)\b/i },
+  { category: 'devsecops', title: /\b(devsecops|securite (des )?(pipelines|devops))\b/i },
+  { category: 'security_architecture', title: /\b(architecte (en |de la )?(cybersecurite|securite)|architecture de securite)\b/i },
+  { category: 'ot_ics_security', title: /\b(securite industrielle|systemes de controle industriel|scada)\b/i },
+  { category: 'privacy_data_protection', title: /\b(protection des (donnees|renseignements personnels)|vie privee|confidentialite des donnees)\b/i },
+  { category: 'security_administration', title: /\b(administrateur (en |de la )?securite|technicien (en )?securite)\b/i },
+  { category: 'security_leadership', title: /\b(directeur (de la )?(securite|cybersecurite)|chef (de la )?securite|responsable (de la )?securite)\b/i },
+  { category: 'adjacent_it', title: /\b(soutien informatique|support informatique|technicien(ne)? (informatique|reseau)|administrateur (de )?(systeme|systemes|reseau|reseaux)|centre d assistance)\b/i },
+];
+
 export const CATEGORY_RULES: CategoryRule[] = [
   {
     category: 'soc_analysis',

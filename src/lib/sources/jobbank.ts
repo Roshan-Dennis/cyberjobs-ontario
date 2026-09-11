@@ -68,8 +68,25 @@ export const TOKENS = [
   'support',
 ];
 
+/** Provinces the board covers, in rough order of posting volume. */
+const PROVINCES: { location: string; province: string }[] = [
+  { location: 'Ontario', province: 'ON' },
+  { location: 'Quebec', province: 'QC' },
+  { location: 'British Columbia', province: 'BC' },
+  { location: 'Alberta', province: 'AB' },
+];
+
 function buildQueries(): Query[] {
-  const queries: Query[] = TOKENS.map((token) => ({ token, location: 'Ontario', province: 'ON' }));
+  // Every token against every province would be 4x the requests for a source
+  // that is already the slowest, so the broad tokens go everywhere and the
+  // narrow ones stay on Ontario. Rotation across runs covers the rest.
+  const BROAD = new Set(['cybersecurity', 'security', 'cyber', 'junior', 'analyst', 'technician']);
+  const queries: Query[] = [];
+  for (const token of TOKENS) {
+    queries.push({ token, location: 'Ontario', province: 'ON' });
+    if (!BROAD.has(token)) continue;
+    for (const p of PROVINCES.slice(1)) queries.push({ token, location: p.location, province: p.province });
+  }
   // A couple of Canada-wide passes to pick up remote roles.
   queries.push({ token: 'cybersecurity', location: 'Canada', province: null });
   queries.push({ token: 'security', location: 'Canada', province: null });

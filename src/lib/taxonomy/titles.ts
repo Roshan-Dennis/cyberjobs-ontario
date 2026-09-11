@@ -19,15 +19,15 @@ const TITLE_NOISE: RegExp[] = [
 const ROMAN = /\b(i{1,3}|iv|v)\b/i;
 
 const SENIORITY_RULES: { level: ExperienceLevel; re: RegExp }[] = [
-  { level: 'internship', re: /\b(intern(ship)?|summer student|student placement|placement student|stagiaire|apprentice)\b/i },
-  { level: 'coop', re: /\b(co-?op|coop|work term|internship\/co-?op|winter 20\d\d|fall 20\d\d|summer 20\d\d)\b/i },
+  { level: 'internship', re: /\b(intern(ship)?|summer student|student placement|placement student|stagiaire|stage|apprenti(e)?|apprentice)\b/i },
+  { level: 'coop', re: /\b(co-?op|coop|work term|internship\/co-?op|alternance|hiver 20\d\d|automne 20\d\d|ete 20\d\d|winter 20\d\d|fall 20\d\d|summer 20\d\d)\b/i },
   { level: 'executive', re: /\b(chief\b|ciso|ciso\b|cio\b|cto\b|c-level|chief information security|chief security|svp|senior vice president|evp|executive vice)\b/i },
   { level: 'director', re: /\b(director|head of|avp|vice president|vp\b)\b/i },
   { level: 'manager', re: /\b(manager|mgr\b|supervisor|team lead(er)?\s*,?\s*(soc|security)|people lead)\b/i },
   { level: 'lead', re: /\b(lead|principal|staff|distinguished|architect|specialist iv|iv\b)\b/i },
   { level: 'senior', re: /\b(senior|sr\.?|snr|expert|advanced|iii\b|level 3|l3|tier 3|t3)\b/i },
-  { level: 'junior', re: /\b(junior|jr\.?|associate|i{1}\b(?!i)|level 1|l1|tier 1|t1)\b/i },
-  { level: 'entry', re: /\b(entry[- ]?level|graduate|new grad|trainee|early career|no experience|0-2 years)\b/i },
+  { level: 'junior', re: /\b(junior|jr\.?|associate|debutant(e)?|i{1}\b(?!i)|level 1|niveau 1|l1|tier 1|t1)\b/i },
+  { level: 'entry', re: /\b(entry[- ]?level|graduate|new grad|trainee|early career|no experience|0-2 years|niveau d entree|nouveau diplome|jeune diplome)\b/i },
   { level: 'mid', re: /\b(intermediate|ii\b|level 2|l2|tier 2|t2|mid[- ]?level)\b/i },
 ];
 

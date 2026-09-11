@@ -1,5 +1,6 @@
 import {
   CATEGORY_RULES,
+  CATEGORY_RULES_FR,
   NON_TECHNICAL_EXCLUSIONS,
   PHYSICAL_SECURITY_EXCLUSIONS,
   SECURITY_TITLE_SIGNALS,
@@ -14,6 +15,24 @@ export interface Classification {
   rejected: boolean;
   rejectReason?: string;
 }
+
+/**
+ * French vocabulary, for Quebec.
+ *
+ * Montreal and Quebec City post a large share of their roles in French only.
+ * Matching the English patterns against "Analyste en cybersécurité" fails on
+ * every term, so those postings were rejected as irrelevant rather than shown.
+ * Accents are stripped before matching, so both "sécurité" and "securite" hit.
+ */
+const CORE_TITLE_FR_RE =
+  /\b(cybersecurite|securite (informatique|des systemes|reseau|applicative|infonuagique|operationnelle)|analyste (en )?(cybersecurite|securite)|ingenieur (en )?(cybersecurite|securite)|architecte (en )?(cybersecurite|securite)|conseiller (en )?(cybersecurite|securite)|specialiste (en )?(cybersecurite|securite)|expert (en )?(cybersecurite|securite)|gestionnaire (de la )?securite|directeur (de la )?securite|pilote de securite|sécurité)\b/i;
+
+const SUPPORTING_BODY_FR_RE =
+  /\b(securite|cybersecurite|menace(s)?|vulnerabilite(s)?|intrusion|hameconnage|rancongiciel|maliciel|pare-feu|chiffrement|authentification|journalisation|conformite|gouvernance|gestion des identites|gestion des acces|analyse de risque(s)?|test(s)? d intrusion|surveillance|incident(s)? de securite|centre operationnel)\b/gi;
+
+/** French pathway titles — the routes into security, Quebec edition. */
+const PATHWAY_TITLE_FR_RE =
+  /\b(soutien informatique|support informatique|technicien(ne)? (informatique|en informatique|reseau|de reseau)|administrateur (de )?(systeme|systemes|reseau|reseaux)|analyste (de )?(systeme|systemes|reseau|reseaux)|centre d assistance|service d assistance|infonuagique|devops)\b/i;
 
 const CORE_TITLE_RE =
   /\b(cyber\s*-?\s*security|cybersecurity|information security|infosec|security (analyst|engineer|architect|specialist|consultant|administrator|manager|director|operations|advisor|officer|developer|researcher|lead|technician|coordinator)|soc analyst|soc engineer|siem|grc|iam|identity and access|pam|privileged access|dfir|forensic|penetration test(er|ers|ing|s)?|pentest(er|ers|ing|s)?|red team|blue team|purple team|threat (intel|hunt|research)|vulnerability (management|analyst|engineer)|appsec|application security|product security|devsecops|cloud security|network security|ciso|incident (response|responder|handler)|malware (analyst|researcher)|security operations|detection (engineer|engineering)|trust (and|&) safety engineer|cryptograph(er|y) engineer|iso\s*27001|security assurance)\b/i;
@@ -37,9 +56,16 @@ const PATHWAY_BASE_SCORE = 28;
  * postings are rejected outright rather than shown with a low score, because
  * a job board full of security-guard listings is worse than a smaller one.
  */
+/** Strip accents so "sécurité" and "securite" match the same pattern. */
+function deaccent(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
 export function classify(title: string, description: string, department = ''): Classification {
   const t = title ?? '';
   const body = `${t}\n${department}\n${description ?? ''}`.slice(0, 20000);
+  const tFr = deaccent(t);
+  const bodyFr = deaccent(body);
 
   // --- Hard rejections -------------------------------------------------
   if (PHYSICAL_SECURITY_EXCLUSIONS.test(t)) {
@@ -53,10 +79,11 @@ export function classify(title: string, description: string, department = ''): C
   }
 
   // --- Signals ---------------------------------------------------------
-  const coreTitleHit = CORE_TITLE_RE.test(t);
+  const coreTitleHit = CORE_TITLE_RE.test(t) || CORE_TITLE_FR_RE.test(tFr);
   const weakTitleHit = SECURITY_TITLE_SIGNALS.test(t);
-  const pathwayTitleHit = PATHWAY_TITLE_RE.test(t);
-  const bodyHits = (body.match(SUPPORTING_BODY_RE) ?? []).length;
+  const pathwayTitleHit = PATHWAY_TITLE_RE.test(t) || PATHWAY_TITLE_FR_RE.test(tFr);
+  const bodyHits =
+    (body.match(SUPPORTING_BODY_RE) ?? []).length + (bodyFr.match(SUPPORTING_BODY_FR_RE) ?? []).length;
 
   let score = 0;
   if (coreTitleHit) score += 62;
@@ -106,6 +133,17 @@ function reject(reason: string): Classification {
 
 function categorize(title: string, body: string, isPathway: boolean): { category: JobCategory; secondary: JobCategory[] } {
   const scores = new Map<JobCategory, number>();
+
+  // French rules run against an accent-stripped copy, so a Montreal posting
+  // lands in a real category rather than "Other".
+  const titleFr = deaccent(title);
+  const bodyFr = deaccent(body);
+  for (const rule of CATEGORY_RULES_FR) {
+    let s = 0;
+    if (rule.title.test(titleFr)) s += 10 * (rule.weight ?? 1);
+    if (rule.body?.test(bodyFr)) s += 3;
+    if (s > 0) scores.set(rule.category, (scores.get(rule.category) ?? 0) + s);
+  }
 
   for (const rule of CATEGORY_RULES) {
     let s = 0;

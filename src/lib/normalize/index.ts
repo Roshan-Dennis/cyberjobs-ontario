@@ -5,7 +5,7 @@ import { extractRequirements, buildKeywords } from '@/lib/normalize/extract';
 import { classify, computeRankScore } from '@/lib/normalize/relevance';
 import { companyKey, fingerprintOf, jobIdOf } from '@/lib/normalize/dedupe';
 import { cleanTitle, inferEmploymentType, inferExperienceLevel, normalizeTitle } from '@/lib/taxonomy/titles';
-import { detectHybrid, detectRemote, matchLocation } from '@/lib/taxonomy/ontario';
+import { detectHybrid, detectRemote, matchLocation } from '@/lib/taxonomy/canada';
 import type { Job, RawJob, WorkArrangement } from '@/lib/types';
 
 export interface NormalizeOptions {
@@ -74,9 +74,9 @@ export function normalizeJob(raw: RawJob, opts: NormalizeOptions = DEFAULT_NORMA
 
   // Geography gate. A location field that names somewhere outside Canada is
   // decisive: the description cannot argue it back in.
-  if (!geo.isOntario) {
+  if (!geo.isInScope) {
     if (geo.isForeign || !(opts.allowRemoteCanada && isRemoteCanada)) {
-      return { job: null, reason: `outside Ontario (${raw.locationRaw || 'no location'})` };
+      return { job: null, reason: `outside coverage (${raw.locationRaw || 'no location'})` };
     }
   }
 
@@ -115,6 +115,8 @@ export function normalizeJob(raw: RawJob, opts: NormalizeOptions = DEFAULT_NORMA
     city: geo.city,
     region: geo.region,
     country: geo.country ?? (geo.isCanada ? 'Canada' : null),
+    province: geo.province,
+    provinceName: geo.provinceName,
     isOntario: geo.isOntario,
     isCanada: geo.isCanada || isRemoteCanada,
 

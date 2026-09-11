@@ -113,6 +113,7 @@ function passesNonTextFilters(job: Job, f: JobFilters, now: number): boolean {
   if (f.onlyPathway && !job.isPathwayRole) return false;
   if (f.includePathway === false && job.isPathwayRole) return false;
 
+  if (!inList(job.province ?? 'other', f.provinces)) return false;
   if (!inList(job.experienceLevel, f.experience)) return false;
   if (!inList(job.category, f.categories)) {
     // Allow a secondary-category match so a "Cloud Security Engineer" also
@@ -216,6 +217,15 @@ export function searchJobs(jobs: Job[], filters: JobFilters, meta: { lastIngestA
 
   const pool = matched.map((m) => m.job);
 
+  // Province facets are counted over everything except the province filter
+  // itself. Counted like the others, selecting Quebec would leave Quebec as the
+  // only option and there would be no way back to the other three without
+  // clearing every filter.
+  const provinceFilters = { ...filters, provinces: undefined };
+  const provincePool = jobs.filter(
+    (job) => job && passesNonTextFilters(job, provinceFilters, now) && textScore(job, parsed) != null,
+  );
+
   return {
     jobs: slice,
     total: matched.length,
@@ -227,6 +237,11 @@ export function searchJobs(jobs: Job[], filters: JobFilters, meta: { lastIngestA
       experience: facet(pool.map((j) => j.experienceLevel), EXPERIENCE_LABELS as Record<string, string>, 12),
       arrangement: facet(pool.map((j) => j.workArrangement), ARRANGEMENT_LABELS, 6),
       employment: facet(pool.map((j) => j.employmentType), EMPLOYMENT_LABELS as Record<string, string>, 8),
+      provinces: facet(
+        provincePool.map((j) => j.province ?? 'other'),
+        { ON: 'Ontario', AB: 'Alberta', BC: 'British Columbia', QC: 'Quebec', other: 'Remote / unspecified' },
+        5,
+      ),
       cities: facet(pool.map((j) => j.city ?? (j.workArrangement === 'remote' ? 'Remote' : 'Other')), undefined, 60),
       companies: facet(pool.map((j) => j.company), undefined, 60),
       sources: facet(pool.map((j) => j.sourceId), undefined, 20),
@@ -269,6 +284,7 @@ export function filtersFromSearchParams(params: URLSearchParams): JobFilters {
     categories: csv(params.get('category')) as JobFilters['categories'],
     arrangement: csv(params.get('arrangement')) as JobFilters['arrangement'],
     employment: csv(params.get('employment')) as JobFilters['employment'],
+    provinces: csv(params.get('province')),
     cities: csv(params.get('city')),
     companies: csv(params.get('company')),
     skills: csv(params.get('skill')),
@@ -294,6 +310,7 @@ export function searchParamsFromFilters(f: JobFilters): URLSearchParams {
     if (v && v.length) p.set(k, v.join(','));
   };
   if (f.q) p.set('q', f.q);
+  setList('province', f.provinces);
   setList('experience', f.experience);
   setList('category', f.categories);
   setList('arrangement', f.arrangement);

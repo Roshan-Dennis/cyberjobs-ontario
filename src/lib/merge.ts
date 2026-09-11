@@ -1,4 +1,4 @@
-import { matchLocation, regionForCity } from '@/lib/taxonomy/ontario';
+import { matchLocation, regionForCity } from '@/lib/taxonomy/canada';
 import type { Job } from '@/lib/types';
 
 /**
@@ -35,15 +35,23 @@ export function revalidate(jobs: Job[]): { jobs: Job[]; dropped: number } {
     // Same gate the ingest applies: in Ontario, or genuinely remote-Canada, and
     // never a location field that names somewhere outside Canada.
     const remoteCanada = job.workArrangement === 'remote' && geo.isCanada;
-    if (geo.isForeign || !(geo.isOntario || remoteCanada)) {
+    if (geo.isForeign || !(geo.isInScope || remoteCanada)) {
       dropped += 1;
       continue;
     }
     // Heal city/region too, so a gazetteer correction shows up immediately.
     kept.push(
-      geo.city === job.city && geo.region === job.region
+      geo.city === job.city && geo.region === job.region && geo.province === job.province
         ? job
-        : { ...job, city: geo.city, region: geo.region ?? regionForCity(geo.city), isOntario: geo.isOntario, isCanada: geo.isCanada },
+        : {
+            ...job,
+            city: geo.city,
+            region: geo.region ?? regionForCity(geo.city),
+            province: geo.province,
+            provinceName: geo.provinceName,
+            isOntario: geo.isOntario,
+            isCanada: geo.isCanada,
+          },
     );
   }
   return { jobs: kept, dropped };

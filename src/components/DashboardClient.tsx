@@ -130,6 +130,13 @@ export function DashboardClient() {
           hrefFor={(key) => `/?experience=${encodeURIComponent(key)}`}
         />
         <BarList
+          title="By province"
+          items={countBy(live.map((j) => j.provinceName ?? (j.workArrangement === 'remote' ? 'Remote (Canada)' : 'Unspecified')))}
+          hrefFor={(key) =>
+            `/?province=${encodeURIComponent({ Ontario: 'ON', Alberta: 'AB', 'British Columbia': 'BC', Quebec: 'QC' }[key] ?? 'other')}`
+          }
+        />
+        <BarList
           title="By region"
           items={countBy(live.map((j) => j.region ?? (j.workArrangement === 'remote' ? 'Remote (Canada)' : 'Unspecified')))}
         />
