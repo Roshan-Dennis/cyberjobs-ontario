@@ -619,6 +619,28 @@ const q10 = searchJobs(corpus, { certifications: ['CompTIA Security+'] }, { last
 check('Certification filter works', q10.total >= 1, q10.total);
 
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+section('City facets grouped by province');
+
+const cityJobs = [
+  mk('t1', { city: 'Toronto', province: 'ON' }),
+  mk('t2', { city: 'Toronto', province: 'ON' }),
+  mk('o1', { city: 'Ottawa', province: 'ON' }),
+  mk('c1', { city: 'Calgary', province: 'AB' }),
+  mk('v1', { city: 'Vancouver', province: 'BC' }),
+  mk('m1', { city: 'Montreal', province: 'QC' }),
+  mk('r1', { city: null, province: null, workArrangement: 'remote' }),
+];
+const grouped = searchJobs(cityJobs, {}, { lastIngestAt: null }).facets.citiesByProvince;
+check('Ontario cities grouped', (grouped.ON ?? []).map((f) => f.value).sort().join(',') === 'Ottawa,Toronto', grouped.ON);
+check('Toronto counted twice', (grouped.ON ?? []).find((f) => f.value === 'Toronto')?.count === 2);
+check('Alberta separated', (grouped.AB ?? []).map((f) => f.value).join(',') === 'Calgary', grouped.AB);
+check('BC separated', (grouped.BC ?? []).map((f) => f.value).join(',') === 'Vancouver', grouped.BC);
+check('Quebec separated', (grouped.QC ?? []).map((f) => f.value).join(',') === 'Montreal', grouped.QC);
+check('Remote lands under other', (grouped.other ?? []).map((f) => f.value).join(',') === 'Remote', grouped.other);
+check('No province leaks into another', !(grouped.ON ?? []).some((f) => ['Calgary', 'Vancouver', 'Montreal'].includes(f.value)));
+
+/* ------------------------------------------------------------------ */
 section('Deep links');
 
 const links = buildDeepLinks({ q: 'soc analyst', cities: ['Toronto'], postedWithinDays: 7, experience: ['entry'] });

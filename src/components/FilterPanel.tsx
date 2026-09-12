@@ -21,6 +21,18 @@ const DATE_OPTIONS: { label: string; value: number | undefined }[] = [
   { label: '30 days', value: 30 },
 ];
 
+/**
+ * City sections, in the order they appear in the sidebar. Ontario leads because
+ * it carries most of the postings; 'other' collects remote and unplaced roles.
+ */
+const CITY_GROUPS: { key: string; title: string }[] = [
+  { key: 'ON', title: 'Ontario cities' },
+  { key: 'QC', title: 'Quebec cities' },
+  { key: 'BC', title: 'B.C. cities' },
+  { key: 'AB', title: 'Alberta cities' },
+  { key: 'other', title: 'Remote & unplaced' },
+];
+
 function Section({
   title,
   children,
@@ -171,7 +183,7 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
       {/* Province leads the sidebar: with four provinces covered it is the
           first cut most people make, and it is the one filter whose absence
           would make the board look wrong to someone outside Ontario. */}
-      <Section title="Province" count={filters.provinces?.length} empty={(facets?.provinces ?? []).length <= 1 && !(filters.provinces?.length ?? 0)}>
+      <Section title="Province" count={filters.provinces?.length} empty={(facets?.provinces ?? []).length <= 1 && !(filters.provinces?.length ?? 0) && !(filters.cities?.length ?? 0)}>
         <CheckList
           facets={facets?.provinces ?? []}
           selected={filters.provinces ?? []}
@@ -234,9 +246,24 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
         <CheckList facets={facets?.categories ?? []} selected={filters.categories ?? []} onToggle={toggler('categories')} limit={10} />
       </Section>
 
-      <Section title="Location" count={filters.cities?.length} empty={(facets?.cities ?? []).length === 0}>
-        <CheckList facets={facets?.cities ?? []} selected={filters.cities ?? []} onToggle={toggler('cities')} limit={10} />
-      </Section>
+      {/* One city section per province rather than a single mixed list. With
+          four provinces covered, Toronto, Calgary and Montreal appeared side by
+          side with nothing saying which province each belonged to. */}
+      {CITY_GROUPS.map(({ key, title }) => {
+        const group = facets?.citiesByProvince?.[key] ?? [];
+        const selectedHere = (filters.cities ?? []).filter((c) => group.some((f) => f.value === c));
+        return (
+          <Section
+            key={key}
+            title={title}
+            count={selectedHere.length}
+            defaultOpen={key === 'ON'}
+            empty={group.length === 0}
+          >
+            <CheckList facets={group} selected={filters.cities ?? []} onToggle={toggler('cities')} limit={10} />
+          </Section>
+        );
+      })}
 
       <Section title="Employment type" count={filters.employment?.length} defaultOpen={false} empty={(facets?.employment ?? []).length === 0}>
         <CheckList facets={facets?.employment ?? []} selected={filters.employment ?? []} onToggle={toggler('employment')} limit={8} />

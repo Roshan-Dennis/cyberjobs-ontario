@@ -23,15 +23,29 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: 'company', label: 'Company A–Z' },
 ];
 
+/** Stable empty object, so the pre-hydration render keeps a stable identity. */
+const EMPTY_FILTERS: JobFilters = {};
+
 export function JobBrowser() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const filters = useMemo(
+  // The export is prerendered with no query string, so the server HTML always
+  // reflects "no filters". Reading the real parameters on the very first client
+  // render therefore produces different markup — a different filter badge, and
+  // sidebar sections that appear or vanish — and React throws away the server
+  // HTML and re-renders. Hold the parameters back for one tick so the first
+  // client render matches, then apply them. Nothing is visible either way,
+  // because the dataset has not arrived yet.
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+
+  const urlFilters = useMemo(
     () => filtersFromSearchParams(new URLSearchParams(searchParams.toString())),
     [searchParams],
   );
+  const filters = hydrated ? urlFilters : EMPTY_FILTERS;
 
   const [dataset, setDataset] = useState<Job[] | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);

@@ -183,6 +183,11 @@ function compare(sort: SortKey): (a: { job: Job; score: number }, b: { job: Job;
   }
 }
 
+/** What a posting is filed under in the city facets. */
+function cityLabel(job: Job): string {
+  return job.city ?? (job.workArrangement === 'remote' ? 'Remote' : 'Other');
+}
+
 function facet(values: (string | null | undefined)[], labels?: Record<string, string>, limit = 40): Facet[] {
   const counts = new Map<string, number>();
   for (const v of values) {
@@ -221,7 +226,10 @@ export function searchJobs(jobs: Job[], filters: JobFilters, meta: { lastIngestA
   // itself. Counted like the others, selecting Quebec would leave Quebec as the
   // only option and there would be no way back to the other three without
   // clearing every filter.
-  const provinceFilters = { ...filters, provinces: undefined };
+  // Province counts ignore both the province filter and the narrower city
+  // filter. Province is the top-level cut, so picking Montreal should not make
+  // the other three provinces disappear from the sidebar.
+  const provinceFilters = { ...filters, provinces: undefined, cities: undefined };
   const provincePool = jobs.filter(
     (job) => job && passesNonTextFilters(job, provinceFilters, now) && textScore(job, parsed) != null,
   );
@@ -242,7 +250,20 @@ export function searchJobs(jobs: Job[], filters: JobFilters, meta: { lastIngestA
         { ON: 'Ontario', AB: 'Alberta', BC: 'British Columbia', QC: 'Quebec', other: 'Remote / unspecified' },
         5,
       ),
-      cities: facet(pool.map((j) => j.city ?? (j.workArrangement === 'remote' ? 'Remote' : 'Other')), undefined, 60),
+      cities: facet(pool.map(cityLabel), undefined, 60),
+      // Cities grouped by the province that owns them. With four provinces in
+      // one list, Toronto, Calgary and Montreal sat side by side with nothing
+      // saying which was which.
+      citiesByProvince: (() => {
+        const groups = new Map<string, string[]>();
+        for (const job of pool) {
+          const key = job.province ?? 'other';
+          const list = groups.get(key);
+          if (list) list.push(cityLabel(job));
+          else groups.set(key, [cityLabel(job)]);
+        }
+        return Object.fromEntries([...groups.entries()].map(([k, v]) => [k, facet(v, undefined, 30)]));
+      })(),
       companies: facet(pool.map((j) => j.company), undefined, 60),
       sources: facet(pool.map((j) => j.sourceId), undefined, 20),
       certifications: facet(pool.flatMap((j) => j.requirements.certifications), undefined, 30),

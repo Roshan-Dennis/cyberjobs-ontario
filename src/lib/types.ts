@@ -264,6 +264,8 @@ export interface JobSearchResult {
     arrangement: Facet[];
     employment: Facet[];
     cities: Facet[];
+    /** City facets split by province, keyed by province code or 'other'. */
+    citiesByProvince: Record<string, Facet[]>;
     companies: Facet[];
     sources: Facet[];
     certifications: Facet[];
