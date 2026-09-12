@@ -60,12 +60,33 @@ export function detectLanguage(text: string): 'fr' | 'en' {
   return fr + accents / 2 > en ? 'fr' : 'en';
 }
 
-function isMeaningfulDescription(text: string): boolean {
+/**
+ * Does this text actually describe the job?
+ *
+ * Two shapes turn up where a description belongs. Short identifiers ("2617970",
+ * "Bangalore · Karnataka · JREQ203319") fall to the word count. The other is a
+ * metadata line — "September 11, 2026 · Bell Canada · Montréal (QC) · Salary
+ * $30.00 to $72.12 hourly · CareerBeacon Job number: 2233638" — which is long
+ * and full of real words, so the word count clears it. It is recognisable by
+ * shape instead: dot-separated fields with no sentence anywhere.
+ */
+export function isMeaningfulDescription(text: string): boolean {
   if (!text) return false;
-  const words = text.split(/\s+/).filter(Boolean);
+  const trimmed = text.trim();
+
+  // A job or requisition number is never part of a description.
+  if (/\b(job|requisition|posting)\s*(number|no\.?|id)\s*:/i.test(trimmed)) return false;
+
+  const words = trimmed.split(/\s+/).filter(Boolean);
   if (words.length < 6) return false;
-  const realWords = words.filter((w) => /^[a-z]{3,}$/i.test(w) && !/^\d+$/.test(w));
-  return realWords.length >= 4;
+  if (words.filter((w) => /^[a-z]{3,}$/i.test(w)).length < 4) return false;
+
+  // A run of "·"-separated fields with no sentence in sight is a metadata row.
+  const separators = (trimmed.match(/·/g) ?? []).length;
+  const sentences = (trimmed.match(/[.!?](\s|$)/g) ?? []).length;
+  if (separators >= 2 && sentences === 0) return false;
+
+  return true;
 }
 
 export function normalizeJob(raw: RawJob, opts: NormalizeOptions = DEFAULT_NORMALIZE_OPTIONS): NormalizeOutcome {

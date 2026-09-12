@@ -8,7 +8,7 @@
  *
  *   npm run selftest
  */
-import { normalizeJob, DEFAULT_NORMALIZE_OPTIONS } from '../src/lib/normalize';
+import { normalizeJob, isMeaningfulDescription, DEFAULT_NORMALIZE_OPTIONS } from '../src/lib/normalize';
 import { dedupeJobs } from '../src/lib/normalize/dedupe';
 import { searchJobs } from '../src/lib/query';
 import { parseSalary } from '../src/lib/normalize/salary';
@@ -368,6 +368,23 @@ check('Category = application_security', htmlJob.job?.category === 'application_
 /* ------------------------------------------------------------------ */
 section('Metadata is not a description');
 
+// The metadata line that survived the first fix. It is long and full of real
+// words, so a word-count test clears it; only its shape gives it away. Worse,
+// the carry-forward rule preserved any non-empty stored description, so the
+// connector change reached no existing posting at all.
+const METADATA_LINES = [
+  'September 11, 2026 · Bell Canada · Montréal (QC) · Salary $30.00 to $72.12 hourly · CareerBeacon Job number: 2233638',
+  'August 20, 2026 · ACEROSEC · King City (ON) · Salary $48.50 hourly · Job Bank Job number: 3652764',
+];
+for (const line of METADATA_LINES) {
+  check(`Metadata line rejected: ${line.slice(0, 28)}…`, !isMeaningfulDescription(line));
+}
+check(
+  'Prose containing a dot separator is still kept',
+  isMeaningfulDescription('Monitor Splunk alerts · triage incidents · escalate to tier three. Python required.'),
+);
+
+
 // Workday's list endpoint returns bullet fields where prose belongs, so cards
 // were published whose entire summary read "R260024652".
 const NOT_DESCRIPTIONS = ['2617970', 'R260024652', 'Bangalore · Karnataka · JREQ203319', 'Toronto · Ontario · JREQ201528'];
@@ -524,6 +541,17 @@ check('Seniority read from it travels too', kept.jobs[0]?.experienceLevel === 'm
 const rewritten = mk('jb', { description: 'Updated posting text with new responsibilities listed here.', summary: 'Updated…' });
 const fresh = mergeSnapshots([enriched], [rewritten], MERGE_OPTS);
 check('A real new description still wins', fresh.jobs[0]?.description?.startsWith('Updated'), fresh.jobs[0]?.description);
+
+// …but only a real description is worth carrying. Preserving any non-empty
+// stored text kept the metadata line the connector had just stopped
+// publishing, so the fix reached no existing posting at all.
+const junk = mk('jb2', { description: METADATA_LINES[0], summary: METADATA_LINES[0] });
+const blank = mk('jb2', { description: '', summary: '' });
+const merged2 = mergeSnapshots([junk], [blank], MERGE_OPTS);
+check('Stored metadata is not carried forward', merged2.jobs[0]?.description === '', merged2.jobs[0]?.description);
+
+const cleaned = revalidate([mk('jb3', { description: METADATA_LINES[1], summary: METADATA_LINES[1] })]);
+check('Already-published metadata is cleaned in place', cleaned.jobs[0]?.description === '', cleaned.jobs[0]?.description);
 
 
 // The merge keys on id, and an id is not stable: Job Bank issues a new job

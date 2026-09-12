@@ -1,3 +1,4 @@
+import { isMeaningfulDescription } from '@/lib/normalize';
 import { classify } from '@/lib/normalize/relevance';
 import { matchLocation, regionForCity } from '@/lib/taxonomy/canada';
 import type { Job } from '@/lib/types';
@@ -35,7 +36,7 @@ import type { Job } from '@/lib/types';
 export function revalidate(jobs: Job[]): { jobs: Job[]; dropped: number } {
   const kept: Job[] = [];
   let dropped = 0;
-  for (const job of jobs) {
+  for (let job of jobs) {
     const geo = matchLocation(job.locationRaw);
     // Same gate the ingest applies: in Ontario, or genuinely remote-Canada, and
     // never a location field that names somewhere outside Canada.
@@ -50,6 +51,13 @@ export function revalidate(jobs: Job[]): { jobs: Job[]; dropped: number } {
     if (classify(job.titleRaw || job.title, job.description ?? '').rejected) {
       dropped += 1;
       continue;
+    }
+
+    // Strip a stored description that would not be accepted today, so records
+    // published before the metadata guard existed are cleaned rather than
+    // carried until they expire.
+    if (job.description && !isMeaningfulDescription(job.description)) {
+      job = { ...job, description: '', summary: '' };
     }
     // Heal city/region too, so a gazetteer correction shows up immediately.
     kept.push(
@@ -129,7 +137,10 @@ export function mergeSnapshots(previous: Job[], current: Job[], options: MergeOp
     // page, fetched a few at a time under a crawl delay, so a posting arrives
     // bare on most runs and enriched on one. Letting the bare record win would
     // throw that away every hour and the description would never stick.
-    const keepText = Boolean(before?.description) && !job.description;
+    // Only carry text forward if it is a real description. Carrying anything
+    // non-empty preserved the metadata line the connector had just stopped
+    // publishing, so the fix never reached a single existing posting.
+    const keepText = isMeaningfulDescription(before?.description ?? '') && !job.description;
     out.push({
       ...job,
       description: keepText ? before!.description : job.description,
