@@ -98,6 +98,7 @@ export default async function JobPage({ params }: Props) {
           {job.isPathwayRole ? (
             <span className="badge badge-alert">Pathway into cyber</span>
           ) : null}
+          {job.language === 'fr' ? <span className="badge" title="This posting is written in French">FR</span> : null}
           {job.isExpired ? <span className="badge text-muted">Likely expired</span> : null}
         </div>
 
@@ -137,6 +138,20 @@ export default async function JobPage({ params }: Props) {
           <div className="mt-2">
             <SaveButton job={job} />
           </div>
+          {/* Quebec employers post in French only. The site cannot translate the
+              text itself — that needs a paid translation service and a server,
+              and this site has neither — so it hands the reader a one-click
+              route to a translator rather than pretending. */}
+          {job.language === 'fr' ? (
+            <a
+              href={`https://translate.google.com/translate?sl=fr&tl=en&u=${encodeURIComponent(job.applyUrl)}`}
+              target="_blank"
+              rel="noopener noreferrer nofollow"
+              className="btn mt-2 w-full py-2 text-sm"
+            >
+              Translate this posting to English ↗
+            </a>
+          ) : null}
           {job.alsoPostedOn.length > 0 ? (
             <div className="mt-3 border-t border-line pt-3">
               <p className="label">Also posted on</p>

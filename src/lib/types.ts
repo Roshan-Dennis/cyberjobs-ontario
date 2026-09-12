@@ -173,6 +173,8 @@ export interface Job {
   city: string | null;
   region: string | null;
   country: string | null;
+  /** Posting language, for the FR badge and the translation link. */
+  language: 'en' | 'fr';
   /** Two-letter province code, when the posting resolves to one. */
   province: 'ON' | 'AB' | 'BC' | 'QC' | null;
   provinceName: string | null;

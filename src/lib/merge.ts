@@ -125,8 +125,20 @@ export function mergeSnapshots(previous: Job[], current: Job[], options: MergeOp
   // Everything seen this run wins: fresher description, salary, ranking.
   for (const job of current) {
     const before = prior.get(job.id);
+    // …with one exception. Some sources only carry a description on a separate
+    // page, fetched a few at a time under a crawl delay, so a posting arrives
+    // bare on most runs and enriched on one. Letting the bare record win would
+    // throw that away every hour and the description would never stick.
+    const keepText = Boolean(before?.description) && !job.description;
     out.push({
       ...job,
+      description: keepText ? before!.description : job.description,
+      descriptionHtml: keepText ? before!.descriptionHtml : job.descriptionHtml,
+      summary: keepText ? before!.summary : job.summary,
+      requirements: keepText ? before!.requirements : job.requirements,
+      // Seniority is read out of the description, so it travels with it.
+      experienceLevel:
+        keepText && job.experienceLevel === 'unknown' ? before!.experienceLevel : job.experienceLevel,
       // Preserve original discovery time so "new today" stays meaningful.
       firstSeenAt: before?.firstSeenAt ?? job.firstSeenAt ?? nowIso,
       lastSeenAt: nowIso,

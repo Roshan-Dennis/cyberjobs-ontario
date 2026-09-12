@@ -27,6 +27,7 @@ export const GREENHOUSE_BOARDS: BoardEntry[] = [
   { token: 'workleap', label: 'Workleap', hint: 'Montreal' },
   { token: 'poka', label: 'Poka', hint: 'Quebec City' },
   { token: 'later', label: 'Later', hint: 'Vancouver' },
+  { token: 'unbounce', label: 'Unbounce', hint: 'Vancouver' },
 
   // Canadian / strong Ontario presence
   { token: 'hootsuite', label: 'Hootsuite' },
@@ -95,6 +96,8 @@ export const GREENHOUSE_BOARDS: BoardEntry[] = [
 /* ------------------------------------------------------------------ */
 export const LEVER_BOARDS: BoardEntry[] = [
   { token: 'spiria', label: 'Spiria', hint: 'Montreal/Gatineau' },
+  { token: 'mistplay', label: 'Mistplay', hint: 'Montreal' },
+  { token: 'osedea', label: 'Osedea', hint: 'Montreal' },
 
   { token: 'palantir', label: 'Palantir' },
   { token: 'bluecatnetworks', label: 'BlueCat Networks', hint: 'Toronto' },
@@ -118,6 +121,9 @@ export const LEVER_BOARDS: BoardEntry[] = [
 /* ------------------------------------------------------------------ */
 export const ASHBY_BOARDS: BoardEntry[] = [
   { token: 'hopper', label: 'Hopper', hint: 'Montreal' },
+  { token: 'jane', label: 'Jane Software', hint: 'Victoria' },
+  { token: 'klue', label: 'Klue', hint: 'Vancouver' },
+  { token: 'procurify', label: 'Procurify', hint: 'Vancouver' },
 
   { token: 'ramp', label: 'Ramp' },
   { token: 'cohere', label: 'Cohere', hint: 'Toronto' },
@@ -148,7 +154,7 @@ export const ASHBY_BOARDS: BoardEntry[] = [
   { token: 'vanta', label: 'Vanta' },
   { token: 'drata', label: 'Drata' },
   { token: 'plaid', label: 'Plaid' },
-  { token: 'lightspeed', label: 'Lightspeed Commerce' },
+  { token: 'lightspeedhq', label: 'Lightspeed Commerce' },
 ];
 
 /* ------------------------------------------------------------------ */

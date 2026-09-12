@@ -64,7 +64,39 @@ export function inferExperienceLevel(title: string, description = ''): Experienc
 const YEARS_RE =
   /(\d{1,2})\s*(?:\+|plus)?\s*(?:-|–|to)?\s*(\d{1,2})?\s*(?:\+)?\s*years?(?:\s+of)?(?:\s+(?:relevant|related|progressive|professional|hands-on|practical|combined|direct))*\s+(?:work\s+)?experience/i;
 
+/**
+ * Job Bank states experience its own way, with the word first and a fixed
+ * vocabulary: "Experience: 3 years to less than 5 years", "Experience: Will
+ * train". YEARS_RE expects "N years of experience" and matches none of it,
+ * which is why Job Bank postings — a quarter of the board — all read
+ * "Not specified".
+ */
+const JOBBANK_EXPERIENCE_RE =
+  /experience:?\s+(will train|no experience|experience an asset|less than\s+(\d{1,2})\s*(?:year|month)s?|(\d{1,2})\s*(month)s?\s+to\s+less than\s+\d{1,2}\s*(?:year|month)s?|(\d{1,2})\s*years?\s+to\s+less than\s+(\d{1,2})\s*years?|(\d{1,2})\s*years?\s+or more)/i;
+
+interface StatedExperience {
+  min: number;
+  label: string;
+}
+
+function jobBankExperience(text: string): StatedExperience | null {
+  const m = JOBBANK_EXPERIENCE_RE.exec(text);
+  if (!m) return null;
+  const [, phrase, lessThan, months, , fromYears, toYears, orMore] = m;
+
+  if (/will train|no experience|experience an asset/i.test(phrase)) {
+    return { min: 0, label: /will train/i.test(phrase) ? 'Will train' : 'No experience required' };
+  }
+  if (lessThan) return { min: 0, label: `Less than ${lessThan} year${lessThan === '1' ? '' : 's'}` };
+  if (months) return { min: 0, label: 'Under a year' };
+  if (fromYears && toYears) return { min: Number(fromYears), label: `${fromYears}–${toYears} years` };
+  if (orMore) return { min: Number(orMore), label: `${orMore}+ years` };
+  return null;
+}
+
 export function extractYearsExperience(text: string): number | null {
+  const stated = jobBankExperience(text);
+  if (stated) return stated.min;
   const m = YEARS_RE.exec(text);
   if (!m) return null;
   const a = Number.parseInt(m[1] ?? '', 10);
@@ -73,6 +105,8 @@ export function extractYearsExperience(text: string): number | null {
 }
 
 export function extractYearsExperienceLabel(text: string): string | null {
+  const stated = jobBankExperience(text);
+  if (stated) return stated.label;
   const m = YEARS_RE.exec(text);
   if (!m) return null;
   const a = m[1];

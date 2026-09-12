@@ -32,6 +32,9 @@ export function ExperienceBadge({ job }: { job: Job }) {
 
 export function EmploymentBadge({ job }: { job: Job }) {
   if (job.employmentType === 'unknown') return null;
+  // An internship is both a seniority and a contract type, so both badges said
+  // "Internship" on the same card. Whichever renders first is enough.
+  if (EMPLOYMENT_LABELS[job.employmentType] === EXPERIENCE_LABELS[job.experienceLevel]) return null;
   return <span className="badge">{EMPLOYMENT_LABELS[job.employmentType]}</span>;
 }
 
@@ -47,6 +50,21 @@ export function PathwayBadge({ job }: { job: Job }) {
       title="Not a security title, but a realistic stepping-stone role into cybersecurity"
     >
       Pathway into cyber
+    </span>
+  );
+}
+
+/**
+ * Marks a posting written in French. Quebec employers post in French only, and
+ * without a marker an English-speaking reader hits a wall of text with no
+ * warning and no obvious way through — the detail page pairs this with a
+ * translation link.
+ */
+export function LanguageBadge({ job }: { job: Job }) {
+  if (job.language !== 'fr') return null;
+  return (
+    <span className="badge" title="This posting is written in French">
+      FR
     </span>
   );
 }

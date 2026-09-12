@@ -153,7 +153,12 @@ function parseSearchHtml(html: string): RawJob[] {
       title,
       company: company.replace(/^Employer:\s*/i, '').trim(),
       locationRaw: location.replace(/^Location:\s*/i, '').trim(),
-      description: snippet,
+      // The snippet is the row's own metadata — date, employer, salary, job
+      // number — not a description. Published as one it produced detail pages
+      // whose entire body read "September 11, 2026 · Bell Canada · Montréal
+      // (QC) · Salary $30.00 to $72.12 hourly". The detail pass below fetches
+      // the real text.
+      description: '',
       descriptionIsHtml: false,
       postedAt: dateText.replace(/^Posted on\s*/i, '').trim() || null,
       salaryRaw: salary.replace(/^Salary:\s*/i, '').trim() || null,
@@ -162,6 +167,45 @@ function parseSearchHtml(html: string): RawJob[] {
   });
 
   return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* Job posting detail                                                  */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Pull the real description off a posting page.
+ *
+ * Job Bank renders the full text into `span[property="description"]`, which is
+ * visually hidden but carries clean, complete prose — tasks, work setting,
+ * technology knowledge. The visible requirements block is where the experience
+ * line lives ("Experience 3 years to less than 5 years"), which is the only
+ * seniority signal these postings have; the list rows carry none, which is why
+ * a third of the board reads "Not specified".
+ */
+export function parseDetail(html: string): { description: string; experience: string | null } {
+  const $ = cheerio.load(html);
+
+  const described = $('[property="description"]').first().text().replace(/\s+/g, ' ').trim();
+  const requirements = $('.job-posting-detail-requirements').first().text().replace(/\s+/g, ' ').trim();
+  const description = described || requirements;
+
+  // Job Bank uses a fixed vocabulary here, so match it explicitly. An earlier
+  // attempt used [^A-Z] with the /i flag, which makes the class match every
+  // letter and truncated "3 years to less than 5 years" to "3 year".
+  const expMatch =
+    /Experience\s+(will train|experience an asset|no experience|less than \d+\s*(?:year|month)s?|\d+\s*(?:year|month)s?\s+to\s+less than\s+\d+\s*(?:year|month)s?|\d+\s*(?:year|month)s?\s+or more|\d+\s*(?:year|month)s?)/i.exec(
+      requirements,
+    );
+  const experience = expMatch ? expMatch[1].trim() : null;
+
+  return {
+    // The experience line lives in the requirements block, not the description
+    // span, and it is the only seniority signal these postings carry. Appending
+    // it lets the existing years-of-experience extraction see it.
+    description: experience && description ? `${description}\n\nExperience: ${experience}.` : description,
+    experience,
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -325,9 +369,34 @@ export const jobBankSource: JobSource = {
     }
 
     const unique = dedupeRaw(results);
+
+    // Fetch real descriptions, newest first, until the budget runs out. Each
+    // page costs a full crawl delay, so only a handful land per run — but the
+    // merge keeps an enriched description once it has one, so the board fills
+    // in over a few hours instead of all at once.
+    let enriched = 0;
+    if (config.jobbank.fetchDetails) {
+      const needing = unique.filter((r) => !r.description);
+      for (const job of needing.slice(0, Math.max(0, config.jobbank.maxDetails))) {
+        if (ctx.deadline.expired) break;
+        try {
+          const html = await fetchText(job.sourceUrl, { retries: 0, timeoutMs: 20_000 });
+          const detail = parseDetail(html);
+          if (detail.description) {
+            job.description = detail.description;
+            job.descriptionIsHtml = false;
+            enriched += 1;
+          }
+          if (detail.experience) job.extra = { ...(job.extra ?? {}), experience: detail.experience };
+        } catch {
+          /* best effort: a posting without a description is still worth listing */
+        }
+      }
+    }
+
     ctx.log(
       `jobbank: ${unique.length} unique from ${requests} requests across ${covered}/${all.length} tokens ` +
-        `(${htmlHits} via results page, ${feedHits} via Atom feed)`,
+        `(${htmlHits} via results page, ${feedHits} via Atom feed, ${enriched} descriptions fetched)`,
     );
     return unique;
   },

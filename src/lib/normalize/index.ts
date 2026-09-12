@@ -37,6 +37,29 @@ const EXPIRY_DAYS = 60;
  * Six or more words, at least one of them a real word rather than a code. That
  * clears prose while rejecting "2617970" and "Bangalore · Karnataka · JREQ203319".
  */
+/**
+ * Rough language detection, French vs English.
+ *
+ * Only two languages matter here, and the signal is strong: French postings are
+ * dense with accents and function words English never uses. This is a display
+ * hint — it decides whether to badge a posting "FR" and offer a translation
+ * link — so a wrong answer costs a mislabelled badge, not a lost posting.
+ */
+const FRENCH_MARKERS =
+  /\b(et|le|la|les|des|une|un|du|au|aux|pour|dans|sur|avec|vous|nous|est|sont|être|votre|notre|sécurité|réseau|données|expérience|travail|équipe|gestion|entreprise|poste|emploi|compétences|connaissances)\b/gi;
+const ENGLISH_MARKERS =
+  /\b(and|the|of|for|with|you|we|is|are|be|your|our|security|network|data|experience|work|team|management|company|role|job|skills|knowledge)\b/gi;
+
+export function detectLanguage(text: string): 'fr' | 'en' {
+  const sample = (text ?? '').slice(0, 4000);
+  if (!sample.trim()) return 'en';
+  const fr = (sample.match(FRENCH_MARKERS) ?? []).length;
+  const en = (sample.match(ENGLISH_MARKERS) ?? []).length;
+  // Accented characters are a strong tiebreaker; English postings rarely have them.
+  const accents = (sample.match(/[àâäçéèêëîïôöùûüœ]/gi) ?? []).length;
+  return fr + accents / 2 > en ? 'fr' : 'en';
+}
+
 function isMeaningfulDescription(text: string): boolean {
   if (!text) return false;
   const words = text.split(/\s+/).filter(Boolean);
@@ -134,6 +157,7 @@ export function normalizeJob(raw: RawJob, opts: NormalizeOptions = DEFAULT_NORMA
     city: geo.city,
     region: geo.region,
     country: geo.country ?? (geo.isCanada ? 'Canada' : null),
+    language: detectLanguage(`${titleRaw} ${description}`),
     province: geo.province,
     provinceName: geo.provinceName,
     isOntario: geo.isOntario,

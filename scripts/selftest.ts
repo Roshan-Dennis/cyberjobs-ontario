@@ -18,7 +18,7 @@ import { normalizeTitle, inferExperienceLevel } from '../src/lib/taxonomy/titles
 import { buildDeepLinks } from '../src/lib/deeplinks';
 import { decodeEscapedHtml } from '../src/lib/normalize/html';
 import { mergeSnapshots, revalidate, sanityCheck } from '../src/lib/merge';
-import { TOKENS as JOBBANK_TOKENS, parseFeed as parseJobBankFeed } from '../src/lib/sources/jobbank';
+import { TOKENS as JOBBANK_TOKENS, parseDetail, parseFeed as parseJobBankFeed } from '../src/lib/sources/jobbank';
 import { activeSources } from '../src/lib/sources/registry';
 import type { RawJob } from '../src/lib/types';
 
@@ -179,6 +179,19 @@ check('Out-of-scope province is Canadian but not in scope', mb.isCanada && !mb.i
 
 /* ------------------------------------------------------------------ */
 section('French-language postings');
+// The site cannot translate, so it labels instead: a wrong guess costs a
+// mislabelled badge, never a hidden posting.
+const LANG_CASES: [string, string, 'en' | 'fr'][] = [
+  ['Analyste en cybersécurité', 'Vous surveillerez les menaces et gérerez les incidents de sécurité pour notre équipe.', 'fr'],
+  ['Conseiller en sécurité', 'Gouvernance, conformité et analyse de risques dans une entreprise de services.', 'fr'],
+  ['Security Analyst', 'You will monitor threats and respond to incidents with our security team.', 'en'],
+  ['SOC Analyst', 'Alert triage, EDR and phishing investigations for the security operations centre.', 'en'],
+];
+for (const [title, description, lang] of LANG_CASES) {
+  const out = normalizeJob(raw({ title, locationRaw: 'Montréal, QC', description }));
+  check(`Language ${lang}: ${title}`, out.job?.language === lang, out.job?.language);
+}
+
 
 const frCases: [string, string, string][] = [
   ['Analyste en cybersécurité', 'Montréal, QC', 'Surveillance des menaces, gestion des incidents de sécurité et des vulnérabilités. Pare-feu et chiffrement.'],
@@ -496,6 +509,23 @@ check('Sanity check tolerates small datasets', sanityCheck(5, 3) === null);
 /* ------------------------------------------------------------------ */
 section('Duplicate records across runs');
 
+// Job Bank only carries a description on the posting page, fetched a handful at
+// a time under a five-second crawl delay. A posting therefore arrives bare on
+// most runs and enriched on one; if the bare record won, the description would
+// be discarded every hour and never stick.
+const enriched = mk('jb', { description: 'Confer with clients to identify requirements and assess security risks.', summary: 'Confer with clients…', experienceLevel: 'mid' });
+const bare = mk('jb', { description: '', summary: '', experienceLevel: 'unknown' });
+const kept = mergeSnapshots([enriched], [bare], MERGE_OPTS);
+check('Enriched description survives a bare re-fetch', kept.jobs[0]?.description?.startsWith('Confer'), kept.jobs[0]?.description);
+check('Summary travels with it', kept.jobs[0]?.summary === 'Confer with clients…', kept.jobs[0]?.summary);
+check('Seniority read from it travels too', kept.jobs[0]?.experienceLevel === 'mid', kept.jobs[0]?.experienceLevel);
+
+// A genuinely updated description must still win.
+const rewritten = mk('jb', { description: 'Updated posting text with new responsibilities listed here.', summary: 'Updated…' });
+const fresh = mergeSnapshots([enriched], [rewritten], MERGE_OPTS);
+check('A real new description still wins', fresh.jobs[0]?.description?.startsWith('Updated'), fresh.jobs[0]?.description);
+
+
 // The merge keys on id, and an id is not stable: Job Bank issues a new job
 // number when an employer reposts, and Workday renumbers. Both records survived
 // and the same role appeared twice on the live board.
@@ -651,6 +681,40 @@ check('All links absolute https', links.every((l) => l.url.startsWith('https://'
 
 /* ------------------------------------------------------------------ */
 section('Job Bank connector (regression guards)');
+
+// Job Bank list rows carry no description — the snippet is the row's own
+// metadata, which is how a detail page came to read "September 11, 2026 · Bell
+// Canada · Montréal (QC) · Salary $30.00 to $72.12 hourly". The real text lives
+// on the posting page.
+const detailHtml = `<span property="description">Tasks: Assess security risks and develop policies for the organisation.</span>
+  <div class="job-posting-detail-requirements">Overview Languages English Experience 3 years to less than 5 years On the road</div>`;
+const detail = parseDetail(detailHtml);
+check('Detail description extracted', detail.description.startsWith('Tasks: Assess security risks'), detail.description.slice(0, 40));
+check('Experience line extracted whole', detail.experience === '3 years to less than 5 years', detail.experience);
+check('Experience appended to the description', /Experience: 3 years to less than 5 years\.$/.test(detail.description), detail.description.slice(-40));
+
+// Job Bank states experience with the word first, which the generic
+// "N years of experience" pattern never matched — the reason a quarter of the
+// board read "Not specified".
+const EXPERIENCE_CASES: [string, string][] = [
+  ['Less than 1 year', 'entry'],
+  ['Will train', 'entry'],
+  ['Experience an asset', 'entry'],
+  ['7 months to less than 1 year', 'entry'],
+  ['1 year to less than 2 years', 'junior'],
+  ['3 years to less than 5 years', 'mid'],
+];
+for (const [stated, level] of EXPERIENCE_CASES) {
+  const out = normalizeJob(
+    raw({
+      title: 'cybersecurity consultant',
+      locationRaw: 'Montréal (QC)',
+      description: `Tasks: Assess security risks, develop policies and respond to incidents.\n\nExperience: ${stated}.`,
+    }),
+  );
+  check(`Job Bank experience "${stated}" -> ${level}`, out.job?.experienceLevel === level, out.job?.experienceLevel);
+}
+
 
 // The first live run fetched 0 from Job Bank because the query terms were
 // multi-word: Job Bank reinterprets those as an employer name and returns

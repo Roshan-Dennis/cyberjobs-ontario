@@ -83,7 +83,9 @@ export const config = {
     crawlDelayMs: Math.max(5000, num(process.env.JOBBANK_CRAWL_DELAY_MS, 5000)),
     maxPagesPerQuery: num(process.env.JOBBANK_MAX_PAGES, 2),
     maxQueries: num(process.env.JOBBANK_MAX_QUERIES, 16),
-    fetchDetails: bool(process.env.JOBBANK_FETCH_DETAILS, false),
+    fetchDetails: bool(process.env.JOBBANK_FETCH_DETAILS, true),
+    /** Detail pages to fetch per run. Each costs a full crawl delay. */
+    maxDetails: num(process.env.JOBBANK_MAX_DETAILS, 10),
   },
 
   adzuna: {

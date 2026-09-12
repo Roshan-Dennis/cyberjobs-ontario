@@ -10,6 +10,7 @@ import {
   CategoryBadge,
   EmploymentBadge,
   ExperienceBadge,
+  LanguageBadge,
   ExpiredBadge,
   PathwayBadge,
   RepostBadge,
@@ -57,6 +58,7 @@ export function JobCard({ job, onTagClick }: { job: Job; onTagClick?: (tech: str
             <CategoryBadge job={job} />
             <PathwayBadge job={job} />
             <RepostBadge job={job} />
+            <LanguageBadge job={job} />
             <ExpiredBadge job={job} />
           </div>
 
