@@ -31,6 +31,20 @@ export interface NormalizeOutcome {
 
 const EXPIRY_DAYS = 60;
 
+/**
+ * Does this text actually describe the job?
+ *
+ * Six or more words, at least one of them a real word rather than a code. That
+ * clears prose while rejecting "2617970" and "Bangalore · Karnataka · JREQ203319".
+ */
+function isMeaningfulDescription(text: string): boolean {
+  if (!text) return false;
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length < 6) return false;
+  const realWords = words.filter((w) => /^[a-z]{3,}$/i.test(w) && !/^\d+$/.test(w));
+  return realWords.length >= 4;
+}
+
 export function normalizeJob(raw: RawJob, opts: NormalizeOptions = DEFAULT_NORMALIZE_OPTIONS): NormalizeOutcome {
   const now = opts.now ?? new Date();
   const nowIso = now.toISOString();
@@ -45,7 +59,12 @@ export function normalizeJob(raw: RawJob, opts: NormalizeOptions = DEFAULT_NORMA
   // rather than per-connector so any source doing the same is covered.
   const rawDescription = raw.descriptionIsHtml ? decodeEscapedHtml(raw.description ?? '') : (raw.description ?? '');
   const descriptionHtml = raw.descriptionIsHtml ? sanitizeHtml(rawDescription) : null;
-  const description = raw.descriptionIsHtml ? htmlToText(rawDescription) : rawDescription.trim();
+  const descriptionText = raw.descriptionIsHtml ? htmlToText(rawDescription) : rawDescription.trim();
+  // Some feeds hand back metadata where the description should be — Workday's
+  // list endpoint returns bullet fields, so cards were published reading
+  // "R260024652". A handful of identifier-ish tokens is not a description, and
+  // showing nothing is better than showing a requisition number.
+  const description = isMeaningfulDescription(descriptionText) ? descriptionText : '';
 
   const cls = classify(titleRaw, description, raw.departmentRaw ?? '');
   if (cls.rejected) return { job: null, reason: cls.rejectReason };

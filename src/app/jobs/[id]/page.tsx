@@ -107,7 +107,14 @@ export default async function JobPage({ params }: Props) {
             // eslint-disable-next-line react/no-danger
             <div className="prose-job" dangerouslySetInnerHTML={{ __html: job.descriptionHtml }} />
           ) : (
-            <div className="prose-job whitespace-pre-wrap">{job.description || 'No description provided by the source.'}</div>
+            <div className="prose-job whitespace-pre-wrap">
+              {job.description || (
+                <span className="text-muted">
+                  This source publishes only the job title and location. Open the original posting for the full
+                  description.
+                </span>
+              )}
+            </div>
           )}
         </div>
 

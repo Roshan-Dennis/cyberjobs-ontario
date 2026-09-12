@@ -3,6 +3,9 @@ import { fetchJson, mapLimit, setHostDelay } from '@/lib/http';
 import { isAllowed } from '@/lib/robots';
 import { WORKDAY_TENANTS } from '@/lib/sources/companies';
 import { CYBER_QUERY_TERMS } from '@/lib/taxonomy/cyber';
+
+/** "R260024652", "JREQ203319", "2617970" — an identifier, not a place. */
+const REQUISITION_ID_RE = /^[A-Z]{0,6}[-_]?\d{4,}$/i;
 import type { JobSource, SourceContext } from '@/lib/sources/types';
 import { dedupeRaw } from '@/lib/sources/types';
 import type { RawJob } from '@/lib/types';
@@ -115,6 +118,15 @@ export const workdaySource: JobSource = {
             seen.add(p.externalPath);
 
             const publicUrl = `https://${tenant.host}/${tenant.site}${p.externalPath}`;
+            // bulletFields carry location metadata, not prose: typically
+            // [city, region, requisition id]. Stored as the description they
+            // published cards reading "R260024652".
+            const bullets = (p.bulletFields ?? []).filter(Boolean);
+            const bulletLocation = bullets.filter((b) => !REQUISITION_ID_RE.test(b)).join(', ');
+            // Never fall back to the tenant hint. It is a rough note about where
+            // an employer is based, and using it as the location published
+            // Thomson Reuters roles in Bangalore, Manila and Zug as Toronto.
+            const locationRaw = p.locationsText || bulletLocation || '';
             results.push({
               sourceJobId: `${tenant.tenant}:${p.externalPath}`,
               sourceId: 'workday',
@@ -123,11 +135,13 @@ export const workdaySource: JobSource = {
               applyUrl: publicUrl,
               title: p.title,
               company: tenant.label.replace(/\s*\(.*\)$/, ''),
-              locationRaw: p.locationsText ?? tenant.hint ?? '',
-              description: (p.bulletFields ?? []).join(' · '),
+              locationRaw,
+              // Left empty on purpose; the detail pass below fills it with real
+              // text, and an empty description beats a requisition number.
+              description: '',
               descriptionIsHtml: false,
               postedAt: postedOnToDate(p.postedOn ?? p.startDate),
-              remoteHint: /remote/i.test(p.locationsText ?? '') || null,
+              remoteHint: /remote/i.test(locationRaw) || null,
               extra: { detailPath: `${base}${p.externalPath}` },
             });
           }
@@ -139,11 +153,15 @@ export const workdaySource: JobSource = {
 
     if (blocked) ctx.log(`workday: ${blocked}/${WORKDAY_TENANTS.length} tenants disallow crawling`);
 
-    // Fetch full descriptions for the postings that look security-relevant.
-    const interesting = results.filter((r) =>
-      CYBER_QUERY_TERMS.some((term) => r.title.toLowerCase().includes(term.split(' ')[0])),
-    );
-    const targets = interesting.slice(0, 60);
+    // Fetch full descriptions. Every result already came back from a
+    // security-term search, so the extra title filter only served to leave more
+    // postings with no description at all. Likely-relevant titles are ordered
+    // first so they win if the deadline bites.
+    const looksRelevant = (r: { title: string }) =>
+      CYBER_QUERY_TERMS.some((term) => r.title.toLowerCase().includes(term.split(' ')[0]));
+    const targets = [...results]
+      .sort((a, b) => Number(looksRelevant(b)) - Number(looksRelevant(a)))
+      .slice(0, 80);
 
     await mapLimit(targets, 3, async (job) => {
       if (ctx.deadline.expired) return;

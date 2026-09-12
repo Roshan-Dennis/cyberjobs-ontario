@@ -352,6 +352,22 @@ check('Plain text derived', (htmlJob.job?.description ?? '').includes('OWASP Top
 check('Category = application_security', htmlJob.job?.category === 'application_security', htmlJob.job?.category);
 
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+section('Metadata is not a description');
+
+// Workday's list endpoint returns bullet fields where prose belongs, so cards
+// were published whose entire summary read "R260024652".
+const NOT_DESCRIPTIONS = ['2617970', 'R260024652', 'Bangalore · Karnataka · JREQ203319', 'Toronto · Ontario · JREQ201528'];
+for (const desc of NOT_DESCRIPTIONS) {
+  const out = normalizeJob(raw({ title: 'Security Analyst', locationRaw: 'Toronto, ON', description: desc }));
+  check(`Rejected as description: ${desc.slice(0, 30)}`, out.job?.description === '' && out.job?.summary === '', out.job?.summary);
+}
+const realDesc = normalizeJob(
+  raw({ title: 'Security Analyst', locationRaw: 'Toronto, ON', description: 'Monitor Splunk alerts, triage incidents and escalate to tier three engineers.' }),
+);
+check('Real prose survives', (realDesc.job?.description ?? '').length > 40, realDesc.job?.description?.slice(0, 30));
+
+/* ------------------------------------------------------------------ */
 section('Entity-encoded HTML (Greenhouse)');
 
 // Greenhouse serves `content` entity-encoded. Missing this put literal <p> tags
@@ -426,10 +442,14 @@ check('Salary survives merge', survivor?.salary.min === 90000, survivor?.salary)
 /* ------------------------------------------------------------------ */
 section('Carry-forward between publishes');
 
+// Distinct postings need distinct fingerprints. The helper used to clone one
+// normalised job, so every fixture shared a fingerprint — harmless until the
+// merge started collapsing on it, at which point the whole set folded into one.
 const mk = (id: string, over: Partial<import('../src/lib/types').Job> = {}) =>
   ({
     ...(normalizeJob(raw({ title: 'Security Analyst', locationRaw: 'Toronto, ON' })).job as import('../src/lib/types').Job),
     id,
+    fingerprint: `fp-${id}`,
     ...over,
   });
 
@@ -471,6 +491,35 @@ check('Sanity check passes normal runs', sanityCheck(70, 72) === null);
 check('Sanity check blocks an empty merge', sanityCheck(70, 0) !== null);
 check('Sanity check blocks a mass disappearance', sanityCheck(70, 20) !== null);
 check('Sanity check tolerates small datasets', sanityCheck(5, 3) === null);
+
+/* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+section('Duplicate records across runs');
+
+// The merge keys on id, and an id is not stable: Job Bank issues a new job
+// number when an employer reposts, and Workday renumbers. Both records survived
+// and the same role appeared twice on the live board.
+const dupA = mk('old-id', { fingerprint: 'same-fp', lastSeenAt: daysAgo(1), firstSeenAt: daysAgo(20), sourceId: 'jobbank' });
+const dupB = mk('new-id', { fingerprint: 'same-fp', lastSeenAt: daysAgo(0), firstSeenAt: daysAgo(0), sourceId: 'jobbank' });
+const collapsed = mergeSnapshots([dupA], [dupB], MERGE_OPTS);
+check('Same fingerprint collapses to one record', collapsed.jobs.length === 1, collapsed.jobs.length);
+check('Collapse is counted', collapsed.collapsed === 1, collapsed.collapsed);
+check('Newest record wins', collapsed.jobs[0]?.id === 'new-id', collapsed.jobs[0]?.id);
+check('Earliest discovery date survives', collapsed.jobs[0]?.firstSeenAt === daysAgo(20), collapsed.jobs[0]?.firstSeenAt);
+
+// A live record beats an expired one even if the expired one was seen later.
+const expiredNewer = mk('expired', { fingerprint: 'fp2', lastSeenAt: daysAgo(0), isExpired: true });
+const liveOlder = mk('live', { fingerprint: 'fp2', lastSeenAt: daysAgo(2), isExpired: false });
+const pick = mergeSnapshots([expiredNewer, liveOlder], [], MERGE_OPTS);
+check('Live record wins over expired duplicate', pick.jobs.length === 1 && pick.jobs[0]?.id === 'live', pick.jobs.map((j) => j.id));
+
+// Distinct postings must not be merged just because they are similar.
+const distinct = mergeSnapshots([], [mk('a', { fingerprint: 'fp-a' }), mk('b', { fingerprint: 'fp-b' })], MERGE_OPTS);
+check('Different fingerprints are left alone', distinct.jobs.length === 2, distinct.jobs.length);
+
+// A record with no fingerprint must never be collapsed into another.
+const blanks = mergeSnapshots([], [mk('n1', { fingerprint: '' }), mk('n2', { fingerprint: '' })], MERGE_OPTS);
+check('Missing fingerprints are not collapsed together', blanks.jobs.length === 2, blanks.jobs.length);
 
 /* ------------------------------------------------------------------ */
 section('Carried-forward postings are re-checked');

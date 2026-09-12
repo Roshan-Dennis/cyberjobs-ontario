@@ -140,7 +140,8 @@ async function main(): Promise<void> {
   console.log(`this run: ${jobs.length} unique postings (${report.duplicatesMerged} duplicates merged)`);
   console.log(
     `merge:    ${merge.added} new, ${merge.refreshed} refreshed, ${merge.carried} carried forward ` +
-      `(${merge.newlyExpired} newly expired), ${merge.dropped} dropped past ${config.ingest.retentionDays}d`,
+      `(${merge.newlyExpired} newly expired), ${merge.dropped} dropped past ${config.ingest.retentionDays}d, ` +
+      `${merge.collapsed} duplicate records collapsed`,
   );
   console.log(`publishing ${merged.length} postings`);
   console.log(`  public/data/jobs.full.json  ${await kb(fullPath)} KB  (build + next run's baseline)`);
