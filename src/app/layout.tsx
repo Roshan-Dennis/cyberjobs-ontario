@@ -86,7 +86,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </span>
               <span className="hidden sm:inline">
                 Cyber<span className="text-accent">Jobs</span>
-                <span className="ml-1 font-normal text-muted">Ontario</span>
               </span>
             </Link>
 

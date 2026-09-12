@@ -1,4 +1,4 @@
-# CyberJobs Ontario
+# CyberJobs
 
 A live cybersecurity job aggregator for **all of Ontario** plus **remote-Canada** roles.
 
