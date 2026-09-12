@@ -1,5 +1,10 @@
 import * as cheerio from 'cheerio';
 import { config } from '@/lib/config';
+
+function durationFromEnv(value: string | undefined, fallback: number): number {
+  const n = Number.parseInt(value ?? '', 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
 import { fetchText, setHostDelay } from '@/lib/http';
 import { isAllowed } from '@/lib/robots';
 import type { JobSource, SourceContext } from '@/lib/sources/types';
@@ -269,6 +274,10 @@ export function parseFeed(xml: string): RawJob[] {
 }
 
 export const jobBankSource: JobSource = {
+  // Every request costs a five-second crawl delay by obligation, so the shared
+  // 90-second ceiling buys about a dozen requests — all of them consumed by
+  // search, leaving none for the posting pages where the descriptions live.
+  maxDurationMs: durationFromEnv(process.env.JOBBANK_MAX_DURATION_MS, 180_000),
   id: 'jobbank',
   name: 'Job Bank (Government of Canada)',
   access:
@@ -309,7 +318,20 @@ export const jobBankSource: JobSource = {
       0,
       Math.max(1, config.jobbank.maxQueries),
     );
-    ctx.log(`jobbank: ${delay}ms delay (robots.txt Crawl-delay honoured), starting at token "${queries[0]?.token}"`);
+    // Reserve time for the detail pass. Sixteen search queries at a five-second
+    // crawl delay consume the whole per-source budget on their own, so the
+    // first attempt at fetching descriptions never ran a single request: the
+    // deadline had already expired by the time the loop was reached. Searching
+    // stops early to leave room, which costs a few tokens this run — rotation
+    // covers them on the next one, and carry-forward keeps both the postings
+    // and the descriptions already collected.
+    const detailBudgetMs = config.jobbank.fetchDetails
+      ? Math.min(ctx.deadline.remaining * 0.45, Math.max(0, config.jobbank.maxDetails) * (delay + 2000))
+      : 0;
+    ctx.log(
+      `jobbank: ${delay}ms delay (robots.txt Crawl-delay honoured), starting at token "${queries[0]?.token}"` +
+        (detailBudgetMs > 0 ? `, ${Math.round(detailBudgetMs / 1000)}s reserved for descriptions` : ''),
+    );
 
     const results: RawJob[] = [];
     let htmlHits = 0;
@@ -321,6 +343,7 @@ export const jobBankSource: JobSource = {
 
     for (const query of queries) {
       if (ctx.deadline.expired) break;
+      if (ctx.deadline.remaining <= detailBudgetMs) break;
 
       // Circuit breaker. Job Bank blocks some source IPs outright — from GitHub
       // Actions runners every request now answers 503. Without this the source

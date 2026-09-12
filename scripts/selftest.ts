@@ -18,7 +18,7 @@ import { normalizeTitle, inferExperienceLevel } from '../src/lib/taxonomy/titles
 import { buildDeepLinks } from '../src/lib/deeplinks';
 import { decodeEscapedHtml } from '../src/lib/normalize/html';
 import { mergeSnapshots, revalidate, sanityCheck } from '../src/lib/merge';
-import { TOKENS as JOBBANK_TOKENS, parseDetail, parseFeed as parseJobBankFeed } from '../src/lib/sources/jobbank';
+import { TOKENS as JOBBANK_TOKENS, jobBankSource, parseDetail, parseFeed as parseJobBankFeed } from '../src/lib/sources/jobbank';
 import { activeSources } from '../src/lib/sources/registry';
 import type { RawJob } from '../src/lib/types';
 
@@ -709,6 +709,18 @@ check('All links absolute https', links.every((l) => l.url.startsWith('https://'
 
 /* ------------------------------------------------------------------ */
 section('Job Bank connector (regression guards)');
+
+// The detail pass shipped without a time budget and never made a single
+// request: sixteen search queries at a five-second crawl delay had already
+// exhausted the per-source ceiling before the loop was reached. The connector
+// declares a longer ceiling and reserves part of it for descriptions.
+check('Job Bank declares its own time ceiling', (jobBankSource.maxDurationMs ?? 0) >= 150_000, jobBankSource.maxDurationMs);
+const reserveFor = (budgetMs: number, delay = 5000, maxDetails = 10) =>
+  Math.min(budgetMs * 0.45, maxDetails * (delay + 2000));
+check('Reserve leaves room for search', reserveFor(180_000) < 180_000 * 0.5, reserveFor(180_000));
+check('Reserve buys several detail pages', Math.floor(reserveFor(180_000) / 7000) >= 5, Math.floor(reserveFor(180_000) / 7000));
+check('A short budget still reserves something', reserveFor(90_000) > 20_000, reserveFor(90_000));
+
 
 // Job Bank list rows carry no description — the snippet is the row's own
 // metadata, which is how a detail page came to read "September 11, 2026 · Bell

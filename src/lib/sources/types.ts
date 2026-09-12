@@ -17,6 +17,15 @@ export interface JobSource {
   isEnabled: () => boolean;
   /** Reason shown when disabled. */
   disabledReason?: () => string;
+  /**
+   * Override the default per-source time ceiling.
+   *
+   * For a source whose cost is dominated by a mandated crawl delay rather than
+   * by response time, the shared ceiling is the wrong shape: Job Bank spends
+   * five seconds per request by obligation, so the default budget buys it a
+   * dozen requests and nothing else.
+   */
+  maxDurationMs?: number;
   fetchJobs: (ctx: SourceContext) => Promise<RawJob[]>;
 }
 

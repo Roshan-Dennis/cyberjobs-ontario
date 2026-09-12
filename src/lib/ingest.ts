@@ -69,7 +69,9 @@ export async function runIngest(options: IngestOptions = {}): Promise<IngestOutc
     try {
       // Each source gets the smaller of the run's remaining time and its own
       // per-source ceiling, so a slow source cannot starve the ones after it.
-      const sourceDeadline = new Deadline(Math.min(deadline.remaining, config.ingest.maxSourceDurationMs));
+      const sourceDeadline = new Deadline(
+        Math.min(deadline.remaining, source.maxDurationMs ?? config.ingest.maxSourceDurationMs),
+      );
       const jobs = await source.fetchJobs({ deadline: sourceDeadline, log });
       raw.push(...jobs);
       reports.push({
