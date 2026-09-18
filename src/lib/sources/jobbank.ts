@@ -407,7 +407,7 @@ export const jobBankSource: JobSource = {
           const detail = parseDetail(html);
           if (detail.description) {
             job.description = detail.description;
-            job.descriptionIsHtml = false;
+            job.descriptionIsHtml = true;
             enriched += 1;
           }
           if (detail.experience) job.extra = { ...(job.extra ?? {}), experience: detail.experience };
