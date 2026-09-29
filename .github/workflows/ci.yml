@@ -51,3 +51,41 @@ jobs:
 # The live-connector check lives in pages.yml: every scheduled publish runs a
 # real ingest and prints the per-source counts to the run summary, so there is
 # no reason to hammer the same third-party APIs a second time from here.
+
+  e2e:
+    name: Click-through (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # The export needs a snapshot to prerender job pages. The fixture is
+      # synthetic, gitignored and never published, so it exercises the real
+      # static export here without any network call to a job source.
+      - name: Build the static site from fixture data
+        run: npm run fixture && npm run build:static
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Click every control
+        run: npm run e2e
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
