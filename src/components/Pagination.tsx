@@ -15,10 +15,18 @@ export function Pagination({
   const push = (n: number | '…') => pages.push(n);
   const window = 2;
 
+  // An ellipsis standing in for a single page ("1 2 3 … 5") hides page 4
+  // behind a symbol that takes the same space as its number, so a gap of one
+  // is shown as the page itself.
+  let lo = Math.max(2, page - window);
+  let hi = Math.min(totalPages - 1, page + window);
+  if (lo === 3) lo = 2;
+  if (hi === totalPages - 2) hi = totalPages - 1;
+
   push(1);
-  if (page - window > 2) push('…');
-  for (let i = Math.max(2, page - window); i <= Math.min(totalPages - 1, page + window); i += 1) push(i);
-  if (page + window < totalPages - 1) push('…');
+  if (lo > 2) push('…');
+  for (let i = lo; i <= hi; i += 1) push(i);
+  if (hi < totalPages - 1) push('…');
   if (totalPages > 1) push(totalPages);
 
   return (

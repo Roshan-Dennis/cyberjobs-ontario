@@ -7,13 +7,19 @@ import { JobCard } from '@/components/JobCard';
 import { Pagination } from '@/components/Pagination';
 import { SearchBar } from '@/components/SearchBar';
 import { DeepLinks, type DeepLinkItem } from '@/components/DeepLinks';
-import { searchHistory } from '@/lib/client/storage';
+import { rememberLastSearch, searchHistory } from '@/lib/client/storage';
 import { loadDataset } from '@/lib/client/dataset';
 import { buildDeepLinks } from '@/lib/deeplinks';
 import { filtersFromSearchParams, searchJobs, searchParamsFromFilters } from '@/lib/query';
 import type { Job, JobFilters, JobSearchResult, SortKey } from '@/lib/types';
 
 type ApiResult = JobSearchResult & { deepLinks: DeepLinkItem[] };
+
+/** Province name of a single selected city, so deep links search the right place. */
+function provinceForCity(jobs: Job[], cities: string[] | undefined): string | undefined {
+  if (!cities || cities.length !== 1) return undefined;
+  return jobs.find((j) => j.city === cities[0])?.provinceName ?? undefined;
+}
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: 'relevance', label: 'Best match' },
@@ -56,6 +62,7 @@ export function JobBrowser() {
   const [infinite, setInfinite] = useState(false);
   const [visiblePages, setVisiblePages] = useState(1);
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
   const queryString = searchParams.toString();
 
@@ -88,9 +95,16 @@ export function JobBrowser() {
   useEffect(() => {
     if (!dataset) return;
     const result = searchJobs(dataset, filters, { lastIngestAt: generatedAt, notes: [], degraded: false });
-    setData({ ...result, deepLinks: buildDeepLinks(filters) });
+    setData({ ...result, deepLinks: buildDeepLinks(filters, provinceForCity(dataset, filters.cities)) });
     setVisiblePages(1);
   }, [dataset, filters, generatedAt]);
+
+  // Remember where the reader was, so "Back to search" on a job page returns
+  // to these results instead of an unfiltered board.
+  useEffect(() => {
+    if (!hydrated) return;
+    rememberLastSearch(queryString);
+  }, [hydrated, queryString]);
 
   // Record the search in local history once results settle.
   useEffect(() => {
@@ -104,16 +118,30 @@ export function JobBrowser() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data?.total, queryString]);
 
-  const update = useCallback(
-    (patch: Partial<JobFilters>) => {
-      const next = { ...filters, ...patch };
-      const qs = searchParamsFromFilters(next).toString();
-      router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  // Filters live in the query string, but every result is computed in the
+  // browser, so changing them needs no server round-trip. router.push fetched
+  // a fresh page payload (index.txt?…&_rsc=…) on every click — a network hop
+  // on GitHub Pages during which a ticked checkbox snapped back to unticked.
+  // A plain pushState updates the URL (and useSearchParams) instantly while
+  // keeping the back button and shareable links working.
+  const navigate = useCallback(
+    (qs: string) => {
+      if (typeof window === 'undefined' || !window.history?.pushState) {
+        router.push(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+        return;
+      }
+      const url = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+      window.history.pushState(null, '', url);
     },
-    [filters, pathname, router],
+    [pathname, router],
   );
 
-  const reset = useCallback(() => router.push(pathname, { scroll: false }), [pathname, router]);
+  const update = useCallback(
+    (patch: Partial<JobFilters>) => navigate(searchParamsFromFilters({ ...filters, ...patch }).toString()),
+    [filters, navigate],
+  );
+
+  const reset = useCallback(() => navigate(''), [navigate]);
 
   // Infinite scroll simply reveals more of the already-computed result set.
   useEffect(() => {
@@ -159,7 +187,7 @@ export function JobBrowser() {
           <SearchBar
             value={filters.q ?? ''}
             onSubmit={(q) => update({ q: q || undefined, page: 1 })}
-            onApplyHistory={(params) => router.push(params ? `${pathname}?${params}` : pathname, { scroll: false })}
+            onApplyHistory={(params) => navigate(params)}
           />
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted">
@@ -185,13 +213,13 @@ export function JobBrowser() {
           />
         </div>
 
-        <div className="min-w-0 space-y-4">
+        <div ref={resultsRef} className="min-w-0 space-y-4">
           <div className="card flex min-h-[3.25rem] flex-wrap items-center gap-2 px-3 py-2.5">
             <button type="button" className="btn lg:hidden" onClick={() => setShowFilters((s) => !s)}>
               {showFilters ? 'Hide filters' : 'Filters'}
             </button>
 
-            <span className="text-sm font-medium">
+            <span className="text-sm font-medium" data-testid="result-count" aria-live="polite">
               {loading && !data ? (
                 <span className="text-muted">Loading…</span>
               ) : (
@@ -280,11 +308,12 @@ export function JobBrowser() {
               <JobCard
                 key={job.id}
                 job={job}
-                onTagClick={(tech) =>
-                  update({
-                    skills: [...new Set([...(filters.skills ?? []), tech])],
-                    page: 1,
-                  })
+                onTagClick={(kind, value) =>
+                  // Certifications live in their own list on each posting, so
+                  // a CISSP tag filtered as a skill used to match nothing.
+                  kind === 'cert'
+                    ? update({ certifications: [...new Set([...(filters.certifications ?? []), value])], page: 1 })
+                    : update({ skills: [...new Set([...(filters.skills ?? []), value])], page: 1 })
                 }
               />
             ))}
@@ -293,7 +322,17 @@ export function JobBrowser() {
           {infinite ? <div ref={sentinelRef} className="h-8" aria-hidden /> : null}
 
           {!infinite && data ? (
-            <Pagination page={data.page} totalPages={data.totalPages} onChange={(p) => update({ page: p })} />
+            <Pagination
+              page={data.page}
+              totalPages={data.totalPages}
+              onChange={(p) => {
+                update({ page: p });
+                // The pager sits under the last card; without this the new
+                // page opened scrolled to its bottom.
+                const top = resultsRef.current;
+                if (top) window.scrollTo({ top: top.getBoundingClientRect().top + window.scrollY - 88, behavior: 'smooth' });
+              }}
+            />
           ) : null}
 
           {data ? <DeepLinks links={data.deepLinks} /> : null}

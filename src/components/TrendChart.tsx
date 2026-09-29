@@ -22,8 +22,11 @@ export function TrendChart({ data, height = 160 }: { data: Point[]; height?: num
   const area = `${line} L${points[points.length - 1][0].toFixed(1)},${height - padY} L${points[0][0].toFixed(1)},${height - padY} Z`;
 
   const total = data.reduce((sum, d) => sum + d.count, 0);
-  const firstLabel = new Date(data[0].date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
-  const lastLabel = new Date(data[data.length - 1].date).toLocaleDateString('en-CA', { month: 'short', day: 'numeric' });
+  // Bucket keys are UTC dates ("2026-09-28"). Formatting them in the reader's
+  // zone put every label a day early anywhere west of Greenwich.
+  const label = (d: string) => new Date(d).toLocaleDateString('en-CA', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const firstLabel = label(data[0].date);
+  const lastLabel = label(data[data.length - 1].date);
 
   return (
     <figure className="mt-3">

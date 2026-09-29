@@ -17,7 +17,10 @@ import {
 } from '@/components/Badges';
 import type { Job } from '@/lib/types';
 
-export function JobCard({ job, onTagClick }: { job: Job; onTagClick?: (tech: string) => void }) {
+/** A tag on the card is either a certification or a tool; each filters its own group. */
+export type TagKind = 'cert' | 'skill';
+
+export function JobCard({ job, onTagClick }: { job: Job; onTagClick?: (kind: TagKind, value: string) => void }) {
   const salary = formatSalary(job.salary);
   const location = [job.city, job.region].filter(Boolean).join(' · ') || job.locationRaw;
   const tech = job.requirements.technologies.slice(0, 6);
@@ -68,12 +71,12 @@ export function JobCard({ job, onTagClick }: { job: Job; onTagClick?: (tech: str
           {(tech.length > 0 || certs.length > 0) && (
             <div className="mt-2.5 flex flex-wrap gap-1.5">
               {certs.map((c) => (
-                <button key={c} type="button" onClick={() => onTagClick?.(c)} className="tag-cert" title={`Filter by ${c}`}>
+                <button key={c} type="button" onClick={() => onTagClick?.('cert', c)} className="tag-cert" title={`Filter by certification: ${c}`}>
                   {c}
                 </button>
               ))}
               {tech.map((t) => (
-                <button key={t} type="button" onClick={() => onTagClick?.(t)} className="tag-button" title={`Filter by ${t}`}>
+                <button key={t} type="button" onClick={() => onTagClick?.('skill', t)} className="tag-button" title={`Filter by ${t}`}>
                   {t}
                 </button>
               ))}

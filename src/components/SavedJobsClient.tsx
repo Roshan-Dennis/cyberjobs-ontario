@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { onStorageChange, savedJobs, searchHistory, type SavedJob, type SearchHistoryEntry } from '@/lib/client/storage';
+import { loadDataset } from '@/lib/client/dataset';
 
 const STATUSES: SavedJob['status'][] = ['saved', 'applied', 'interviewing', 'rejected', 'offer'];
 
@@ -19,6 +20,19 @@ export function SavedJobsClient() {
   const [history, setHistory] = useState<SearchHistoryEntry[]>([]);
   const [filter, setFilter] = useState<string>('all');
   const [mounted, setMounted] = useState(false);
+  // Ids on the current board. A saved posting that has since been taken down
+  // has no page any more, so its title must not link to a 404.
+  const [liveIds, setLiveIds] = useState<Set<string> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadDataset().then((d) => {
+      if (!cancelled && d.jobs.length) setLiveIds(new Set(d.jobs.map((j) => j.id)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -82,7 +96,14 @@ export function SavedJobsClient() {
         </div>
       </section>
 
-      {visible.length === 0 ? (
+      {visible.length === 0 && jobs.length > 0 ? (
+        <div className="card p-8 text-center">
+          <p className="text-sm font-medium">No saved jobs marked &ldquo;{filter}&rdquo;.</p>
+          <button type="button" className="btn mt-4" onClick={() => setFilter('all')}>
+            Show all saved jobs
+          </button>
+        </div>
+      ) : visible.length === 0 ? (
         <div className="card p-8 text-center">
           <p className="text-sm font-medium">Nothing saved yet.</p>
           <p className="mt-1 text-sm text-muted">Use the ☆ button on any job card to keep track of it.</p>
@@ -97,9 +118,21 @@ export function SavedJobsClient() {
               <div className="flex flex-wrap items-start gap-3">
                 <div className="min-w-0 flex-1">
                   <h2 className="font-semibold">
-                    <Link href={`/jobs/${job.id}`} className="hover:text-brand hover:underline">
-                      {job.title}
-                    </Link>
+                    {liveIds && !liveIds.has(job.id) ? (
+                      <>
+                        {job.title}{' '}
+                        <span
+                          className="badge ml-1 align-middle text-xs font-normal text-muted"
+                          title="This posting is no longer on the board. The employer's link may still work."
+                        >
+                          No longer listed
+                        </span>
+                      </>
+                    ) : (
+                      <Link href={`/jobs/${job.id}`} className="hover:text-brand hover:underline">
+                        {job.title}
+                      </Link>
+                    )}
                   </h2>
                   <p className="text-sm text-muted">
                     {job.company} · {job.location}

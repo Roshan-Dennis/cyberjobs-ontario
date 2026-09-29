@@ -143,7 +143,9 @@ export function DashboardClient() {
         <BarList
           title="Top cities"
           items={countBy(live.map((j) => j.city ?? (j.workArrangement === 'remote' ? 'Remote' : 'Unspecified'))).slice(0, 12)}
-          hrefFor={(key) => `/?city=${encodeURIComponent(key)}`}
+          // Postings with no city are filed under "Other" by the job filter;
+          // linking "Unspecified" straight through matched nothing.
+          hrefFor={(key) => `/?city=${encodeURIComponent(key === 'Unspecified' ? 'Other' : key)}`}
         />
         <BarList
           title="Most-requested certifications"
