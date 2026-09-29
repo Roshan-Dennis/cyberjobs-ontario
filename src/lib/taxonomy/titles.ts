@@ -116,6 +116,33 @@ export function extractYearsExperienceLabel(text: string): string | null {
 }
 
 /** Strip ATS noise and tidy whitespace/punctuation. */
+const TITLE_ACRONYMS = new Set([
+  'it', 'soc', 'noc', 'iam', 'pam', 'grc', 'siem', 'dfir', 'ot', 'ics', 'aws', 'gcp', 'ciso', 'cio', 'cto',
+  'ai', 'ml', 'qa', 'ux', 'ui', 'vp', 'hr', 'erp', 'sap', 'crm', 'edr', 'xdr', 'mdr', 'vpn', 'lan', 'wan', 'ti',
+]);
+const TITLE_SMALL_WORDS = new Set(['a', 'an', 'and', 'as', 'at', 'by', 'for', 'in', 'of', 'on', 'or', 'the', 'to',
+  'with', 'de', 'des', 'du', 'et', 'la', 'le', 'les', 'en', 'au', 'aux']);
+
+/**
+ * Title-case a title that arrived entirely in lower case. Job Bank publishes
+ * its titles that way ("informatics security consultant"), which sat oddly
+ * among employer-written titles. Mixed-case titles are left exactly as the
+ * employer wrote them.
+ */
+export function titleCaseIfLower(title: string): string {
+  if (!title || /[A-Z]/.test(title) || !/[a-z]/.test(title)) return title;
+  let first = true;
+  return title.replace(/[\p{L}\p{N}][\p{L}\p{N}'’]*/gu, (word) => {
+    const lower = word.toLowerCase();
+    const isFirst = first;
+    first = false;
+    if (TITLE_ACRONYMS.has(lower)) return lower.toUpperCase();
+    if (lower === 'devsecops') return 'DevSecOps';
+    if (!isFirst && TITLE_SMALL_WORDS.has(lower)) return lower;
+    return lower.charAt(0).toUpperCase() + lower.slice(1);
+  });
+}
+
 export function cleanTitle(raw: string): string {
   let out = (raw ?? '').replace(/\s+/g, ' ').trim();
   for (const re of TITLE_NOISE) out = out.replace(re, ' ');
@@ -124,7 +151,7 @@ export function cleanTitle(raw: string): string {
     .replace(/\s*[,\-–—|/]\s*$/, '')
     .replace(/^\s*[,\-–—|/]\s*/, '')
     .trim();
-  return out || (raw ?? '').trim();
+  return titleCaseIfLower(out || (raw ?? '').trim());
 }
 
 const CANONICAL_REPLACEMENTS: [RegExp, string][] = [
