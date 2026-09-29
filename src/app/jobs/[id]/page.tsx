@@ -1,5 +1,4 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { findJob, readSnapshot } from '@/lib/snapshot';
 import { relativeTime } from '@/lib/normalize/dates';
@@ -7,6 +6,7 @@ import { formatSalary } from '@/lib/normalize/salary';
 import { CATEGORY_LABELS, EMPLOYMENT_LABELS, EXPERIENCE_LABELS } from '@/lib/types';
 import { SaveButton } from '@/components/SaveButton';
 import { MarkViewed } from '@/components/MarkViewed';
+import { BackToSearch } from '@/components/BackToSearch';
 
 // Prerender one page per posting. `dynamicParams = false` makes an unknown id
 // render the 404 page instead of attempting a server render, which is what the
@@ -72,9 +72,7 @@ export default async function JobPage({ params }: Props) {
       <MarkViewed id={job.id} />
 
       <article className="card p-6">
-        <Link href="/" className="text-sm text-brand hover:underline">
-          ← Back to search
-        </Link>
+        <BackToSearch />
 
         <h1 className="mt-3 text-2xl font-semibold leading-tight">{job.title}</h1>
         <p className="mt-1 text-base text-muted">
