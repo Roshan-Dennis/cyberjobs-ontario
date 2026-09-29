@@ -222,17 +222,31 @@ export function searchJobs(jobs: Job[], filters: JobFilters, meta: { lastIngestA
 
   const pool = matched.map((m) => m.job);
 
-  // Province facets are counted over everything except the province filter
-  // itself. Counted like the others, selecting Quebec would leave Quebec as the
-  // only option and there would be no way back to the other three without
-  // clearing every filter.
+  // Facets are disjunctive: each group is counted over everything that passes
+  // every OTHER filter, but not its own. Counted over the final pool instead,
+  // ticking "Junior" left Junior as the only experience option, so the
+  // checkboxes behaved like radio buttons — Internship + Junior + Entry, the
+  // combination an entry-level searcher most needs, could not be built.
+  //
+  // Skills are the exception. They combine with AND (a posting must ask for
+  // every ticked tool), so the useful count is "how many of the current
+  // results also mention this one", which is exactly the final pool.
+  const textPool = jobs.filter((job) => job && textScore(job, parsed) != null);
+  const poolWithout = (...keys: (keyof JobFilters)[]): Job[] => {
+    if (keys.every((k) => {
+      const v = filters[k];
+      return v == null || (Array.isArray(v) && v.length === 0);
+    })) return pool;
+    const relaxed: JobFilters = { ...filters };
+    for (const k of keys) delete relaxed[k];
+    return textPool.filter((job) => passesNonTextFilters(job, relaxed, now));
+  };
+
   // Province counts ignore both the province filter and the narrower city
   // filter. Province is the top-level cut, so picking Montreal should not make
   // the other three provinces disappear from the sidebar.
-  const provinceFilters = { ...filters, provinces: undefined, cities: undefined };
-  const provincePool = jobs.filter(
-    (job) => job && passesNonTextFilters(job, provinceFilters, now) && textScore(job, parsed) != null,
-  );
+  const provincePool = poolWithout('provinces', 'cities');
+  const cityPool = poolWithout('cities');
 
   return {
     jobs: slice,
@@ -241,22 +255,22 @@ export function searchJobs(jobs: Job[], filters: JobFilters, meta: { lastIngestA
     pageSize,
     totalPages,
     facets: {
-      categories: facet(pool.map((j) => j.category), CATEGORY_LABELS as Record<string, string>),
-      experience: facet(pool.map((j) => j.experienceLevel), EXPERIENCE_LABELS as Record<string, string>, 12),
-      arrangement: facet(pool.map((j) => j.workArrangement), ARRANGEMENT_LABELS, 6),
-      employment: facet(pool.map((j) => j.employmentType), EMPLOYMENT_LABELS as Record<string, string>, 8),
+      categories: facet(poolWithout('categories').map((j) => j.category), CATEGORY_LABELS as Record<string, string>),
+      experience: facet(poolWithout('experience').map((j) => j.experienceLevel), EXPERIENCE_LABELS as Record<string, string>, 12),
+      arrangement: facet(poolWithout('arrangement').map((j) => j.workArrangement), ARRANGEMENT_LABELS, 6),
+      employment: facet(poolWithout('employment').map((j) => j.employmentType), EMPLOYMENT_LABELS as Record<string, string>, 8),
       provinces: facet(
         provincePool.map((j) => j.province ?? 'other'),
         { ON: 'Ontario', AB: 'Alberta', BC: 'British Columbia', QC: 'Quebec', other: 'Remote / unspecified' },
         5,
       ),
-      cities: facet(pool.map(cityLabel), undefined, 60),
+      cities: facet(cityPool.map(cityLabel), undefined, 60),
       // Cities grouped by the province that owns them. With four provinces in
       // one list, Toronto, Calgary and Montreal sat side by side with nothing
       // saying which was which.
       citiesByProvince: (() => {
         const groups = new Map<string, string[]>();
-        for (const job of pool) {
+        for (const job of cityPool) {
           const key = job.province ?? 'other';
           const list = groups.get(key);
           if (list) list.push(cityLabel(job));
@@ -264,9 +278,9 @@ export function searchJobs(jobs: Job[], filters: JobFilters, meta: { lastIngestA
         }
         return Object.fromEntries([...groups.entries()].map(([k, v]) => [k, facet(v, undefined, 30)]));
       })(),
-      companies: facet(pool.map((j) => j.company), undefined, 60),
-      sources: facet(pool.map((j) => j.sourceId), undefined, 20),
-      certifications: facet(pool.flatMap((j) => j.requirements.certifications), undefined, 30),
+      companies: facet(poolWithout('companies').map((j) => j.company), undefined, 60),
+      sources: facet(poolWithout('sources').map((j) => j.sourceId), undefined, 20),
+      certifications: facet(poolWithout('certifications').flatMap((j) => j.requirements.certifications), undefined, 30),
       skills: facet(pool.flatMap((j) => [...j.requirements.technologies].slice(0, 12)), undefined, 40),
     },
     meta: {
@@ -278,13 +292,49 @@ export function searchJobs(jobs: Job[], filters: JobFilters, meta: { lastIngestA
   };
 }
 
+/** How many filters are narrowing the results (search text not included). */
+export function countActiveFilters(f: JobFilters): number {
+  return (
+    (f.provinces?.length ?? 0) +
+    (f.experience?.length ?? 0) +
+    (f.categories?.length ?? 0) +
+    (f.arrangement?.length ?? 0) +
+    (f.employment?.length ?? 0) +
+    (f.cities?.length ?? 0) +
+    (f.companies?.length ?? 0) +
+    (f.skills?.length ?? 0) +
+    (f.certifications?.length ?? 0) +
+    (f.sources?.length ?? 0) +
+    (f.postedWithinDays ? 1 : 0) +
+    // A custom date range used to go uncounted, which left "Clear all filters"
+    // disabled while the range was quietly hiding most of the board.
+    (f.postedFrom || f.postedTo ? 1 : 0) +
+    (f.salaryMin ? 1 : 0) +
+    (f.hasSalary ? 1 : 0) +
+    (f.onlyPathway ? 1 : 0) +
+    (f.includePathway === false ? 1 : 0) +
+    (f.includeExpired ? 1 : 0)
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* URL <-> filter serialisation                                        */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Lists travel in the URL comma-joined (`city=Toronto,Ottawa`). Some values
+ * contain a comma themselves — employers such as "Remarcable, Inc." — and a
+ * plain split turned that into "Remarcable" and "Inc.", which match nothing.
+ * Values are joined with a bare comma, while a comma inside a name is followed
+ * by a space, so only a comma with no space after it separates items.
+ */
+export function splitList(v: string): string[] {
+  return v.split(/,(?!\s)/).map((s) => s.trim()).filter(Boolean);
+}
+
 function csv(v: string | null): string[] | undefined {
   if (!v) return undefined;
-  const list = v.split(',').map((s) => s.trim()).filter(Boolean);
+  const list = splitList(v);
   return list.length ? list : undefined;
 }
 

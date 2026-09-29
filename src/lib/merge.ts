@@ -1,6 +1,8 @@
 import { isMeaningfulDescription } from '@/lib/normalize';
 import { classify } from '@/lib/normalize/relevance';
 import { matchLocation, regionForCity } from '@/lib/taxonomy/canada';
+import { parseSalary } from '@/lib/normalize/salary';
+import { cleanTitle } from '@/lib/taxonomy/titles';
 import type { Job } from '@/lib/types';
 
 /**
@@ -59,6 +61,18 @@ export function revalidate(jobs: Job[]): { jobs: Job[]; dropped: number } {
     if (job.description && !isMeaningfulDescription(job.description)) {
       job = { ...job, description: '', summary: '' };
     }
+    // Re-read the salary and display title under today's rules as well. A
+    // salary parsed with the old period logic ($61,000 "annually" stored as
+    // hourly) would otherwise sit at the top of the salary sort until expiry.
+    if (job.salary?.raw) {
+      const salary = parseSalary(job.salary.raw, job.description ?? '');
+      if (salary.period !== job.salary.period || salary.annualMax !== job.salary.annualMax || salary.annualMin !== job.salary.annualMin) {
+        job = { ...job, salary };
+      }
+    }
+    const title = cleanTitle(job.titleRaw || job.title);
+    if (title !== job.title) job = { ...job, title };
+
     // Heal city/region too, so a gazetteer correction shows up immediately.
     kept.push(
       geo.city === job.city && geo.region === job.region && geo.province === job.province

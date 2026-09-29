@@ -28,9 +28,32 @@ const WITHIN_TO_LINKEDIN_SECONDS: Record<number, number> = {
   30: 2592000,
 };
 
-function primaryLocation(f: JobFilters): string {
-  if (f.cities && f.cities.length === 1 && f.cities[0] !== 'Remote') return `${f.cities[0]}, Ontario, Canada`;
-  return 'Ontario, Canada';
+const PROVINCE_NAMES: Record<string, string> = {
+  ON: 'Ontario',
+  AB: 'Alberta',
+  BC: 'British Columbia',
+  QC: 'Quebec',
+};
+
+/** Region the other sites should search, taken from the province/city filters. */
+function primaryRegion(f: JobFilters, cityProvince?: string): string {
+  const provinces = (f.provinces ?? []).filter((p) => PROVINCE_NAMES[p]);
+  if (provinces.length === 1) return PROVINCE_NAMES[provinces[0]];
+  if (cityProvince) return cityProvince;
+  // Several provinces ticked: search Canada-wide. Nothing ticked: Ontario,
+  // where most of the board is, as before.
+  return provinces.length > 1 ? 'Canada' : 'Ontario';
+}
+
+/**
+ * Location string for the other sites. It used to hard-code Ontario, so
+ * choosing Calgary searched for "Calgary, Ontario, Canada".
+ */
+function primaryLocation(f: JobFilters, cityProvince?: string): string {
+  const region = primaryRegion(f, cityProvince);
+  const city = f.cities && f.cities.length === 1 && !['Remote', 'Other'].includes(f.cities[0]) ? f.cities[0] : null;
+  if (city) return cityProvince ? `${city}, ${cityProvince}, Canada` : `${city}, Canada`;
+  return region === 'Canada' ? 'Canada' : `${region}, Canada`;
 }
 
 function keywords(f: JobFilters): string {
@@ -45,9 +68,10 @@ export interface DeepLink {
   note: string;
 }
 
-export function buildDeepLinks(f: JobFilters): DeepLink[] {
+export function buildDeepLinks(f: JobFilters, cityProvince?: string): DeepLink[] {
   const kw = keywords(f);
-  const loc = primaryLocation(f);
+  const loc = primaryLocation(f, cityProvince);
+  const region = primaryRegion(f, cityProvince);
   const remote = f.arrangement?.length === 1 && f.arrangement[0] === 'remote';
 
   // ---- LinkedIn ----
@@ -68,7 +92,7 @@ export function buildDeepLinks(f: JobFilters): DeepLink[] {
   if (f.salaryMin) ind.set('q', `${kw} $${Math.round(f.salaryMin / 1000)},000`);
 
   // ---- Glassdoor ----
-  const gd = new URLSearchParams({ sc: '0kf', typedKeyword: kw, locT: 'S', locName: remote ? 'Canada' : 'Ontario' });
+  const gd = new URLSearchParams({ sc: '0kf', typedKeyword: kw, locT: 'S', locName: remote ? 'Canada' : region });
 
   // ---- Google Jobs ----
   const googleQuery = `${kw} jobs ${remote ? 'remote Canada' : loc}`;
@@ -96,7 +120,7 @@ export function buildDeepLinks(f: JobFilters): DeepLink[] {
     },
     {
       site: 'Job Bank',
-      url: `https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=${encodeURIComponent(kw)}&locationstring=${encodeURIComponent(remote ? 'Canada' : 'Ontario')}`,
+      url: `https://www.jobbank.gc.ca/jobsearch/jobsearch?searchstring=${encodeURIComponent(kw)}&locationstring=${encodeURIComponent(remote || region === 'Canada' ? 'Canada' : region)}`,
       note: 'The federal job board — already indexed here, link included for completeness.',
     },
     {
