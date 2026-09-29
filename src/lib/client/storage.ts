@@ -91,6 +91,23 @@ export const viewedJobs = {
   },
 };
 
+/** Query string of the last results page viewed in this tab. */
+export function rememberLastSearch(params: string): void {
+  try {
+    window.sessionStorage.setItem(`${PREFIX}last-search`, params);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
+export function lastSearch(): string {
+  try {
+    return window.sessionStorage.getItem(`${PREFIX}last-search`) ?? '';
+  } catch {
+    return '';
+  }
+}
+
 export function onStorageChange(handler: () => void): () => void {
   if (typeof window === 'undefined') return () => undefined;
   const listener = () => handler();
