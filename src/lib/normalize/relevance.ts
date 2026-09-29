@@ -1,4 +1,9 @@
 import {
+  BODY_ONLY_TITLE_RE,
+  NON_TECH_EMPLOYER_RE,
+  PHYSICAL_SECURITY_EMPLOYER_RE,
+  TECHNICAL_DESCRIPTION_RE,
+  TECHNICAL_TITLE_QUALIFIER_RE,
   CATEGORY_RULES,
   CATEGORY_RULES_FR,
   NON_TECHNICAL_EXCLUSIONS,
@@ -37,13 +42,13 @@ const PATHWAY_TITLE_FR_RE =
   /\b(soutien informatique|support informatique|technicien(ne)? (informatique|en informatique|reseau|de reseau)|administrateur (de )?(systeme|systemes|reseau|reseaux)|analyste (de )?(systeme|systemes|reseau|reseaux)|centre d assistance|service d assistance|infonuagique|devops)\b/i;
 
 const CORE_TITLE_RE =
-  /\b(cyber\s*-?\s*security|cybersecurity|information security|infosec|security (analyst|engineer|architect|specialist|consultant|administrator|manager|director|operations|advisor|officer|developer|researcher|lead|technician|coordinator)|soc analyst|soc engineer|siem|grc|iam|identity and access|pam|privileged access|dfir|forensic|penetration test(er|ers|ing|s)?|pentest(er|ers|ing|s)?|red team|blue team|purple team|threat (intel|hunt|research)|vulnerability (management|analyst|engineer)|appsec|application security|product security|devsecops|cloud security|network security|ciso|incident (response|responder|handler)|malware (analyst|researcher)|security operations|detection (engineer|engineering)|trust (and|&) safety engineer|cryptograph(er|y) engineer|iso\s*27001|security assurance)\b/i;
+  /\b(cyber\s*-?\s*security|cybersecurity|information security|infosec|security (analyst|engineer|architect|specialist|consultant|administrator|manager|director|operations|advisor|officer|developer|researcher|lead|technician|coordinator)|soc analyst|soc engineer|siem|grc|iam|identity and access|identity (engineer|architect|analyst|specialist|administrator)|pam|privileged access|dfir|forensic|penetration test(er|ers|ing|s)?|pentest(er|ers|ing|s)?|red team|blue team|purple team|threat (intel|hunt|research)|vulnerability (management|analyst|engineer)|appsec|application security|product security|devsecops|cloud security|network security|ciso|incident (response|responder|handler)|malware (analyst|researcher)|security operations|detection (engineer|engineering)|trust (and|&) safety engineer|cryptograph(er|y) engineer|iso\s*27001|security assurance)\b/i;
 
 const SUPPORTING_BODY_RE =
   /\b(siem|soc\b|edr\b|xdr\b|soar\b|mitre att&ck|nist|iso 27001|soc 2|threat|vulnerabilit(y|ies)|penetration test(er|ers|ing|s)?|incident(s| response| handling)|phishing|malware|firewall|zero trust|security (controls|posture|operations|team|tooling|patches|awareness)|risk assessment|encryption|iam\b|identity and access|sigma rules|detection engineering|cyber|forensic|pen test(er|ers|ing|s)?|red team|blue team|hardening|least privilege|mfa\b|multi-factor)\b/gi;
 
 const PATHWAY_TITLE_RE =
-  /\b(help\s*desk|service\s*desk|desktop support|technical support|it support|noc\b|network operations|system(s)? (administrator|analyst|engineer)|sysadmin|network (administrator|analyst|engineer|technician)|cloud (engineer|administrator|analyst|support)|infrastructure (analyst|engineer|specialist|administrator)|it (analyst|technician|specialist|generalist|operations)|devops engineer|site reliability engineer|sre\b|database administrator|endpoint (administrator|engineer)|m365 administrator|microsoft 365 administrator|systems support)\b/i;
+  /\b(help\s*desk|service\s*desk|desktop support|technical support|it support|noc\b|network operations|(?<!\b(ml|machine learning|learning|distributed|data|software|electronics?|embedded|control|controls|mechanical|electrical|avionics|ai|robotics) )system(s)? (administrator|analyst|engineer)|sysadmin|network (administrator|analyst|engineer|technician)|cloud (engineer|administrator|analyst|support)|infrastructure (analyst|engineer|specialist|administrator)|it (analyst|technician|specialist|generalist|operations)|devops engineer|site reliability engineer|sre\b|database administrator|endpoint (administrator|engineer)|m365 administrator|microsoft 365 administrator|systems support)\b/i;
 
 /**
  * Floor applied to adjacent-IT roles that show real security exposure, so they
@@ -63,8 +68,9 @@ function deaccent(s: string): string {
   return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-export function classify(title: string, description: string, department = ''): Classification {
+export function classify(title: string, description: string, department = '', company = ''): Classification {
   const t = title ?? '';
+  const desc = description ?? '';
   const body = `${t}\n${department}\n${description ?? ''}`.slice(0, 20000);
   const tFr = deaccent(t);
   const bodyFr = deaccent(body);
@@ -83,6 +89,29 @@ export function classify(title: string, description: string, department = ''): C
   }
   if (NON_TECHNICAL_EXCLUSIONS.test(t) && !CORE_TITLE_RE.test(t)) {
     return reject('Non-technical role');
+  }
+  // A guarding company's "Security Manager" manages guards.
+  // Accented letters are not word characters to \b, so every employer and
+  // description check also runs on an accent-stripped copy ("Café", "sécurité").
+  const companyFr = deaccent(company);
+  const descFr = deaccent(desc);
+  if (
+    (PHYSICAL_SECURITY_EMPLOYER_RE.test(company) || PHYSICAL_SECURITY_EMPLOYER_RE.test(companyFr)) &&
+    !TECHNICAL_TITLE_QUALIFIER_RE.test(t) &&
+    !TECHNICAL_TITLE_QUALIFIER_RE.test(tFr)
+  ) {
+    return reject('Physical security employer');
+  }
+  // A description of real length that never mentions anything technical is
+  // about some other job, whatever occupation code the employer picked.
+  if (desc.trim().length >= 150 && !TECHNICAL_DESCRIPTION_RE.test(desc) && !TECHNICAL_DESCRIPTION_RE.test(descFr)) {
+    return reject('Title not supported by the description');
+  }
+  // Restaurants, retailers and care agencies posting under an IT title are
+  // kept only when their own description shows security work.
+  if (NON_TECH_EMPLOYER_RE.test(company) || NON_TECH_EMPLOYER_RE.test(companyFr)) {
+    const descHits = (desc.match(SUPPORTING_BODY_RE) ?? []).length + (descFr.match(SUPPORTING_BODY_FR_RE) ?? []).length;
+    if (descHits === 0) return reject('Title does not match the employer');
   }
 
   // --- Signals ---------------------------------------------------------
@@ -112,6 +141,12 @@ export function classify(title: string, description: string, department = ''): C
   }
 
   score = Math.max(0, Math.min(100, Math.round(score)));
+
+  // Description-only evidence needs a title that could plausibly be security
+  // work; company boilerplate that mentions security is not enough.
+  if (!coreTitleHit && !pathwayTitleHit && !weakTitleHit && !BODY_ONLY_TITLE_RE.test(t) && !BODY_ONLY_TITLE_RE.test(tFr)) {
+    return reject('Security appears only in the description');
+  }
 
   // Reject: neither a security title nor a pathway title nor enough body signal.
   if (!coreTitleHit && !pathwayTitleHit && !(weakTitleHit && bodyHits >= 6) && bodyHits < 10) {

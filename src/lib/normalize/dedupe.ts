@@ -28,8 +28,19 @@ export function companyKey(company: string): string {
     if (next === key || next === '') break;
     key = next;
   }
-  return key;
+  return COMPANY_ALIASES[key] ?? key;
 }
+
+/**
+ * Employers that publish the same requisitions under two names. BlackBerry
+ * runs a second Workday site for QNX, so every QNX role appeared twice — once
+ * as "BlackBerry" and once as "BlackBerry QNX" — and the fingerprint, which
+ * includes the employer, could not see they were one job.
+ */
+const COMPANY_ALIASES: Record<string, string> = {
+  'blackberry-qnx': 'blackberry',
+  qnx: 'blackberry',
+};
 
 export function locationKey(city: string | null, isRemote: boolean): string {
   if (isRemote && !city) return 'remote';

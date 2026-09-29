@@ -55,7 +55,9 @@ function toNumber(token: string): number | null {
   return isK ? n * 1000 : n;
 }
 
-const AMOUNT = String.raw`\$?\s?\d{1,3}(?:[,\s ']\d{3})*(?:\.\d{1,2})?[kK]?|\$?\s?\d+(?:\.\d{1,2})?[kK]?`;
+// Thousands separators: comma, space, NBSP, apostrophe — and a comma followed
+// by a space, as in "$170, 000 to $200, 000", which used to parse as $0-$200.
+const AMOUNT = String.raw`\$?\s?\d{1,3}(?:(?:,\s?|[\s '])\d{3})*(?:\.\d{1,2})?[kK]?|\$?\s?\d+(?:\.\d{1,2})?[kK]?`;
 const RANGE_RE = new RegExp(String.raw`(${AMOUNT})\s*(?:-|–|—|to|à|and)\s*(${AMOUNT})`, 'i');
 const SINGLE_RE = new RegExp(String.raw`(?:\$|CAD|USD)\s?(${AMOUNT})`, 'i');
 

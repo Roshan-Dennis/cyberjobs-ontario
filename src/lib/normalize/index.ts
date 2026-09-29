@@ -110,7 +110,7 @@ export function normalizeJob(raw: RawJob, opts: NormalizeOptions = DEFAULT_NORMA
   // showing nothing is better than showing a requisition number.
   const description = isMeaningfulDescription(descriptionText) ? descriptionText : '';
 
-  const cls = classify(titleRaw, description, raw.departmentRaw ?? '');
+  const cls = classify(titleRaw, description, raw.departmentRaw ?? '', company);
   if (cls.rejected) return { job: null, reason: cls.rejectReason };
   if (cls.isPathwayRole && !opts.includePathway) return { job: null, reason: 'pathway role excluded' };
   if (cls.relevanceScore < opts.minRelevance) return { job: null, reason: `relevance ${cls.relevanceScore} below threshold` };
