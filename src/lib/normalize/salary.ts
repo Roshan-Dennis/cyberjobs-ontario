@@ -68,7 +68,12 @@ export function parseSalary(raw: string | null | undefined, contextText = ''): S
   if (!text) return { ...EMPTY };
 
   const haystack = `${text} ${contextText.slice(0, 400)}`;
-  let period = detectPeriod(haystack);
+  // The salary text itself decides the period; the description is only a
+  // fallback. Reading both together let "37.5 hours per week" in the
+  // description override "annually" in the salary field, so a $61,000/yr Job
+  // Bank posting was stored as $61,000/hr — $126M a year — and topped the
+  // salary sort.
+  let period = detectPeriod(text) ?? detectPeriod(contextText.slice(0, 400));
   const currency = detectCurrency(haystack) ?? 'CAD';
 
   let min: number | null = null;
@@ -86,8 +91,13 @@ export function parseSalary(raw: string | null | undefined, contextText = ''): S
   if (min == null && max == null) return { ...EMPTY, raw: text, currency: null };
   if (min != null && max != null && min > max) [min, max] = [max, min];
 
-  // Infer the period from magnitude when the text does not say.
+  // Infer the period from magnitude when the text does not say — or when
+  // what it says is impossible. Nobody is paid $500+ an hour or $50k+ a week
+  // in this market; a figure that large is an annual salary.
   const probe = max ?? min ?? 0;
+  if ((period === 'hour' && probe >= 500) || (period === 'day' && probe >= 5000) || (period === 'week' && probe >= 25000)) {
+    period = null;
+  }
   if (!period) {
     if (probe > 0 && probe < 200) period = 'hour';
     else if (probe >= 200 && probe < 3000) period = 'week';
