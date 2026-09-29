@@ -73,6 +73,41 @@ for (let i = 0; i < 96; i += 1) {
   });
 }
 
+// Edge cases seen on the live board, so the e2e run exercises them too:
+// a company name containing a comma (breaks comma-separated URL filters), a
+// Job Bank salary stated annually beside a description that mentions hours,
+// and an all-lowercase Job Bank title.
+raws.push(
+  {
+    sourceJobId: 'fixture-edge-comma',
+    sourceId: 'lever',
+    sourceName: 'Lever',
+    sourceUrl: 'https://example.com/jobs/edge-comma',
+    applyUrl: 'https://example.com/jobs/edge-comma/apply',
+    title: 'Security Operations Analyst',
+    company: 'Remarcable, Inc.',
+    locationRaw: 'Toronto, ON',
+    description: 'Triage SIEM alerts in Splunk, tune detections and support incident response. CompTIA Security+ an asset.',
+    descriptionIsHtml: false,
+    postedAt: new Date(now - 2 * DAY).toISOString(),
+    salaryRaw: null,
+  },
+  {
+    sourceJobId: 'fixture-edge-annual',
+    sourceId: 'jobbank',
+    sourceName: 'Job Bank',
+    sourceUrl: 'https://example.com/jobs/edge-annual',
+    applyUrl: 'https://example.com/jobs/edge-annual/apply',
+    title: 'informatics security consultant',
+    company: 'Durham Community Health Centre',
+    locationRaw: 'Oshawa, ON',
+    description: 'Work 37.5 hours per week securing clinical systems. Firewall administration, vulnerability scanning with Nessus and security awareness training.',
+    descriptionIsHtml: false,
+    postedAt: new Date(now - 3 * DAY).toISOString(),
+    salaryRaw: 'Salary $61,000.00 to $75,000.00 annually',
+  },
+);
+
 async function main() {
   const jobs = raws.map((r) => normalizeJob(r)).flatMap((o) => (o.job ? [o.job] : []));
   const payload = {

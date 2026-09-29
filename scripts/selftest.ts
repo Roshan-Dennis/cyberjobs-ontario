@@ -10,11 +10,11 @@
  */
 import { normalizeJob, isMeaningfulDescription, DEFAULT_NORMALIZE_OPTIONS } from '../src/lib/normalize';
 import { dedupeJobs } from '../src/lib/normalize/dedupe';
-import { searchJobs } from '../src/lib/query';
+import { searchJobs, filtersFromSearchParams, searchParamsFromFilters, countActiveFilters } from '../src/lib/query';
 import { parseSalary } from '../src/lib/normalize/salary';
 import { matchLocation } from '../src/lib/taxonomy/canada';
 import { classify } from '../src/lib/normalize/relevance';
-import { normalizeTitle, inferExperienceLevel } from '../src/lib/taxonomy/titles';
+import { normalizeTitle, inferExperienceLevel, cleanTitle } from '../src/lib/taxonomy/titles';
 import { buildDeepLinks } from '../src/lib/deeplinks';
 import { decodeEscapedHtml } from '../src/lib/normalize/html';
 import { mergeSnapshots, revalidate, sanityCheck } from '../src/lib/merge';
@@ -804,6 +804,62 @@ process.env.INGEST_DISABLED_SOURCES = 'workday';
 check('Disable list applies', !activeSources().some((s) => s.id === 'workday'));
 delete process.env.INGEST_DISABLED_SOURCES;
 check('All sources return when unset', activeSources().length >= 10, activeSources().length);
+
+
+/* ------------------------------------------------------------------ */
+section('Defects found in the Sept 2026 click-through');
+
+// Salary: the salary text decides the period, not the description.
+const annual = parseSalary('Salary $61,000.00 to $75,000.00 annually', 'Work 37.5 hours per week on clinical systems.');
+check('"annually" beats "hours" in the description', annual.period === 'year', annual);
+check('Annual salary stays under $1M', (annual.annualMax ?? 0) === 75000, annual.annualMax);
+const hourlyWords = parseSalary('$61,000 - $75,000', 'Paid hourly overtime available.');
+check('Five-figure amount cannot be hourly', hourlyWords.period === 'year', hourlyWords);
+const realHourly = parseSalary('$30.00 to $45.00 hourly');
+check('Genuine hourly pay still hourly', realHourly.period === 'hour' && realHourly.annualMin === 62400, realHourly);
+
+// Titles: all-lowercase titles are title-cased, others untouched.
+check('Lowercase Job Bank title is title-cased', cleanTitle('informatics security consultant') === 'Informatics Security Consultant', cleanTitle('informatics security consultant'));
+check('Acronyms upper-cased', cleanTitle('it security analyst') === 'IT Security Analyst', cleanTitle('it security analyst'));
+check('Small words stay lower', cleanTitle('analyst, informatics security and compliance') === 'Analyst, Informatics Security and Compliance', cleanTitle('analyst, informatics security and compliance'));
+check('Mixed-case titles untouched', cleanTitle('SOC Analyst (Tier 2)') === 'SOC Analyst (Tier 2)');
+
+// URL lists: a company containing a comma survives the round trip.
+const commaFilters = filtersFromSearchParams(new URLSearchParams(searchParamsFromFilters({ companies: ['Remarcable, Inc.', 'BMO'] }).toString()));
+check('Comma inside a company name survives the URL', JSON.stringify(commaFilters.companies) === JSON.stringify(['Remarcable, Inc.', 'BMO']), commaFilters.companies);
+check('Plain comma lists still split', JSON.stringify(filtersFromSearchParams(new URLSearchParams('city=Toronto,Ottawa')).cities) === '["Toronto","Ottawa"]');
+
+// A custom date range counts as an active filter (enables "Clear all").
+check('Custom date range counts as active', countActiveFilters({ postedFrom: '2026-09-20' }) === 1);
+check('Hide-pathway option counts as active', countActiveFilters({ includePathway: false }) === 1);
+
+// Facets are disjunctive: ticking one experience level keeps the others.
+{
+  const pool = ['Junior SOC Analyst', 'Senior Security Engineer', 'Security Analyst Intern', 'Junior IAM Analyst'].map((t, i) =>
+    normalizeJob(raw({ sourceJobId: `facet-${i}`, title: t, description: 'SIEM triage with Splunk and incident response.' })).job!,
+  ).filter(Boolean);
+  const withJunior = searchJobs(pool, { experience: ['junior'] }, { lastIngestAt: null });
+  const levels = withJunior.facets.experience.map((f) => f.value);
+  check('Other experience levels remain selectable', levels.includes('senior') && levels.includes('junior'), levels);
+  check('Results still narrowed to the ticked level', withJunior.jobs.every((j) => j.experienceLevel === 'junior'), withJunior.jobs.map((j) => j.experienceLevel));
+}
+
+// Carried-forward postings get the corrected salary and title.
+{
+  const stale = normalizeJob(raw({ sourceJobId: 'carried-salary', title: 'informatics security consultant', description: 'Work 37.5 hours per week. Firewalls and SIEM.', salaryRaw: 'Salary $61,000.00 to $75,000.00 annually' })).job!;
+  const broken = { ...stale, title: 'informatics security consultant', salary: { ...stale.salary, period: 'hour', annualMin: 126880000, annualMax: 156000000 } };
+  const [fixed] = revalidate([broken]).jobs;
+  check('Carried posting salary re-parsed', fixed?.salary.period === 'year' && fixed?.salary.annualMax === 75000, fixed?.salary);
+  check('Carried posting title re-cased', fixed?.title === 'Informatics Security Consultant', fixed?.title);
+}
+
+// Deep links follow the province/city filters instead of assuming Ontario.
+{
+  const li = (f: Parameters<typeof buildDeepLinks>[0], p?: string) => new URL(buildDeepLinks(f, p)[0].url).searchParams.get('location');
+  check('Calgary searches Alberta', li({ cities: ['Calgary'] }, 'Alberta') === 'Calgary, Alberta, Canada', li({ cities: ['Calgary'] }, 'Alberta'));
+  check('Quebec filter searches Quebec', li({ provinces: ['QC'] }) === 'Quebec, Canada', li({ provinces: ['QC'] }));
+  check('No filter keeps Ontario default', li({}) === 'Ontario, Canada', li({}));
+}
 
 /* ------------------------------------------------------------------ */
 console.log(`\n${'='.repeat(70)}`);
