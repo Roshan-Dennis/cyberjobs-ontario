@@ -376,11 +376,14 @@ src/
 scripts/
   build-data.ts                 produces the JSON snapshots
   ingest.ts                     CLI ingest into the optional store
-  selftest.ts                   86 assertions over the transform layer
+  selftest.ts                   247 assertions over the transform layer
   list-sources.ts               connector status
+e2e/
+  site.spec.ts                  Playwright click-through of every control
+  serve.mjs                     serves out/ the way GitHub Pages does
 supabase/schema.sql             optional database schema
 .github/workflows/
-  ci.yml                        typecheck, lint, self-test, build
+  ci.yml                        typecheck, lint, self-test, build, click-through
   pages.yml                     hourly: collect data, export, publish
 ```
 
@@ -393,8 +396,19 @@ npm run sources                # which connectors are enabled here
 npm run data                   # collect postings and write both snapshots
 npm run data -- --only greenhouse,lever --budget 120000
 npm run fixture                # synthetic snapshot, so the site builds offline
-npm run selftest               # 139 assertions over the transform layer
+npm run selftest               # 247 assertions over the transform layer
+npm run e2e                    # click every control (after fixture + build:static)
 npm run publish                # data + static export into out/
+```
+
+The click-through suite builds the site from the fixture snapshot and, in a
+real browser, clicks every filter checkbox, date chip, sort and page-size option,
+pagination button, card tag, save/details/apply button, dashboard link and
+saved-jobs control, failing on any JavaScript error. First run locally:
+
+```bash
+npx playwright install chromium
+npm run fixture && npm run build:static && npm run e2e
 ```
 
 Every publish prints a per-source table (fetched / kept / duration / error) to the

@@ -20,7 +20,8 @@
     "data": "tsx scripts/build-data.ts",
     "build:static": "STATIC_EXPORT=1 next build",
     "publish": "npm run data && npm run build:static",
-    "fixture": "tsx scripts/fixture-data.ts"
+    "fixture": "tsx scripts/fixture-data.ts",
+    "e2e": "playwright test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
@@ -30,6 +31,7 @@
     "react-dom": "19.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.56.0",
     "@types/node": "^22.10.5",
     "@types/react": "^19.0.7",
     "@types/react-dom": "^19.0.3",
