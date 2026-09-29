@@ -383,6 +383,25 @@ export const CATEGORY_RULES: CategoryRule[] = [
     category: 'security_sales_engineering',
     title: /\b(security\s+(sales|solutions?|pre-?sales)\s+engineer|solutions? architect,?\s+security|security consultant,? presales)\b/i,
   },
+  // Generic titles that name the field but no speciality. Without these,
+  // "Cybersecurity Manager", "Cybersecurity Advisor" and "Cyber Security
+  // Co-op" all landed in "Other" even though the title is unambiguous.
+  {
+    category: 'security_leadership',
+    title: /\b(cyber\s*-?\s*security\s+(manager|director|lead)|security\s+service\s+manager|senior\s+manager,?\s+information\s+security)\b/i,
+  },
+  {
+    category: 'grc',
+    title: /\b((cyber\s*-?\s*security|information\s+security|security)\s+advis[eo]r|information\s+security\s+risk)\b/i,
+  },
+  {
+    category: 'soc_analysis',
+    title: /\bcyber\s*-?\s*security\s+(co-?op|intern(ship)?|student)\b/i,
+  },
+  {
+    category: 'penetration_testing',
+    title: /\b(security|vulnerability)\s+researcher\b/i,
+  },
   {
     category: 'adjacent_it',
     title: /\b(help\s*desk|service\s*desk|desktop support|technical support|it support|noc|network operations?|systems? (administrator|analyst|engineer)|sysadmin|network (administrator|analyst|engineer|technician)|cloud (engineer|administrator|analyst)|infrastructure (analyst|engineer|specialist)|it (analyst|technician|specialist|generalist)|devops engineer|site reliability|database administrator|it operations)\b/i,
@@ -426,6 +445,49 @@ export const PHYSICAL_SECURITY_EXCLUSIONS =
  * Non-technical roles that merely mention security. Excluded unless a strong
  * technical signal is also present.
  */
+/**
+ * Employers whose business is guarding premises. A "Security Manager" there
+ * runs guards, not a SOC — one live Job Bank posting of that kind described
+ * "co-ordinate administrative services" and nothing technical.
+ */
+export const PHYSICAL_SECURITY_EMPLOYER_RE =
+  /\b(security services|security patrol|protection services|guard services|investigation services|s[ée]curit[ée] (priv[ée]e|incendie))\b/i;
+
+/** A technical qualifier that makes a title at such an employer an IT role. */
+export const TECHNICAL_TITLE_QUALIFIER_RE =
+  /\b(cyber\w*|information|informatique|it|network|r[ée]seau|cloud|data|computer|systems?|soc|siem|application|software)\b/i;
+
+/**
+ * Consumer businesses — restaurants, franchises, retail, home care — that
+ * post Job Bank listings under an IT occupation code with nothing behind it.
+ * Four "Cybersecurity Manager" postings from a Subway, a Tim Hortons and two
+ * care agencies, and "Cybersecurity Consultant" postings from an optical
+ * retailer and a wine store, reached the live board; the one with a
+ * description was hiring eyecare sales associates. Such a posting is kept only
+ * if its own description shows real security work.
+ */
+export const NON_TECH_EMPLOYER_RE =
+  /\b(subway|tim hortons|mcdonald'?s|a ?& ?w|dairy queen|wendy'?s|burger|pizz(a|eria)|restaurants?|resto|caf[ée]|bistro|bakery|boulangerie|wine|liquor|specsavers|optical|dental|tile|stone|salon|spa|hotel|motel|grocery|[ée]picerie|dollarama|home care|soins|daycare|garderie|franchise)\b/i;
+
+/**
+ * Title words that make a description-only match plausible. A posting whose
+ * title names no security, pathway or related duty is kept on description
+ * evidence alone only with one of these. Without the check, company
+ * boilerplate was enough: an Okta "Marketing Automation Manager" and a Dropbox
+ * "Solutions Consultant" passed because their employers mention security in
+ * every posting.
+ */
+export const BODY_ONLY_TITLE_RE =
+  /\b(cyber\w*|identity|identit[ée]|fraud(e)?|trust|safety|abuse|integrity|detection|incidents?|audit\w*|governance|gouvernance|risques?)\b/i;
+
+/**
+ * Words any genuine security or IT description contains. A description of
+ * real length with none of them is about another job entirely, whatever the
+ * title says ("Cybersecurity Consultant" describing eyecare retail sales).
+ */
+export const TECHNICAL_DESCRIPTION_RE =
+  /\b(secur\w*|s[ée]curit[ée]|cyber\w*|privacy|confidentialit\w*|complian\w*|conformit[ée]|audit\w*|risk\w*|risque\w*|threat\w*|vulnerab\w*|incident\w*|firewall\w*|encrypt\w*|network\w*|r[ée]seau\w*|informati\w+|computer\w*|software|logiciel\w*|systems?|syst[èe]mes?|cloud|infonuagique|servers?|serveurs?|data|donn[ée]es|IT|TI|technolog\w*|technical|technique\w*|applications?)\b/i;
+
 export const NON_TECHNICAL_EXCLUSIONS =
   /\b(social (worker|security)|food security|job security|security deposit|securities (trading|analyst|lawyer)|financial securities|insurance broker|life insurance|security systems installer|alarm installer|locksmith|welder|driver|nurse|caregiver|cook|cashier|cleaner|janitor|warehouse|forklift|truck driver|labourer|laborer|farm worker|receptionist)\b/i;
 
