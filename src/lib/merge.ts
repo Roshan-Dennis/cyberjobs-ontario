@@ -2,6 +2,8 @@ import { isMeaningfulDescription } from '@/lib/normalize';
 import { classify } from '@/lib/normalize/relevance';
 import { matchLocation, regionForCity } from '@/lib/taxonomy/canada';
 import { parseSalary } from '@/lib/normalize/salary';
+import { fingerprintOf } from '@/lib/normalize/dedupe';
+import { decodeEscapedHtml, htmlToText, sanitizeHtml, summarize } from '@/lib/normalize/html';
 import { cleanTitle } from '@/lib/taxonomy/titles';
 import type { Job } from '@/lib/types';
 
@@ -18,6 +20,9 @@ import type { Job } from '@/lib/types';
  * ("keep everything seen in the last N days") instead of an accident of how far
  * back each source's feed happens to reach.
  */
+
+/** A real HTML tag, as left behind by an unprocessed description. */
+const HTML_TAG_RE = /<\/?(p|br|strong|b|i|em|u|ul|ol|li|div|span|h[1-6]|a|table|tr|td)\b[^>]*>/i;
 
 /**
  * Re-check carried-forward postings against the current rules.
@@ -50,7 +55,7 @@ export function revalidate(jobs: Job[]): { jobs: Job[]; dropped: number } {
 
     // Relevance is re-judged as well, so a classifier fix reaches the postings
     // already published rather than only the next batch.
-    if (classify(job.titleRaw || job.title, job.description ?? '').rejected) {
+    if (classify(job.titleRaw || job.title, job.description ?? '', '', job.company).rejected) {
       dropped += 1;
       continue;
     }
@@ -61,6 +66,28 @@ export function revalidate(jobs: Job[]): { jobs: Job[]; dropped: number } {
     if (job.description && !isMeaningfulDescription(job.description)) {
       job = { ...job, description: '', summary: '' };
     }
+    // A description stored before the Job Bank HTML fix still carries literal
+    // <p><strong> tags, and so does the summary on its card. Run it through
+    // the same decode/sanitise/text pipeline a fresh posting gets.
+    const descHasTags = HTML_TAG_RE.test(job.description ?? '');
+    if (descHasTags || HTML_TAG_RE.test(job.summary ?? '')) {
+      const html = decodeEscapedHtml(descHasTags ? job.description : job.summary);
+      const text = htmlToText(html);
+      job = descHasTags
+        ? { ...job, description: text, descriptionHtml: job.descriptionHtml ?? sanitizeHtml(html), summary: summarize(text) }
+        : { ...job, summary: summarize(text) };
+    }
+
+    // The fingerprint depends on rules that change (employer aliases, title
+    // keys), so recompute it: a stored one would keep a duplicate alive.
+    const fingerprint = fingerprintOf({
+      title: job.titleRaw || job.title,
+      company: job.company,
+      city: geo.city,
+      isRemote: job.workArrangement === 'remote',
+    });
+    if (fingerprint !== job.fingerprint) job = { ...job, fingerprint };
+
     // Re-read the salary and display title under today's rules as well. A
     // salary parsed with the old period logic ($61,000 "annually" stored as
     // hourly) would otherwise sit at the top of the salary sort until expiry.
