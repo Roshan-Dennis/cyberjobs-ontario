@@ -887,6 +887,10 @@ check('Coffee franchise with no description rejected', classify('Cybersecurity M
 check('Home-care agency with no description rejected', classify('Cybersecurity Manager', '', '', 'Soins Idéal / Ideal Care').rejected);
 check('Staffing firm with no description kept', !classify('Cybersecurity Manager', '', '', 'Labranche RH').rejected);
 check('Guarding company Security Manager rejected', classify('Security Manager', 'Tasks: Co-ordinate administrative services. Manage the operations of a department.', '', 'BRAVO SECURITY SERVICES LTD.').rejected);
+check('Threat Hunter and Threat Researcher are core security titles', classify('Threat Hunter', 'Hunt adversaries.').relevanceScore >= 62 && classify('Senior Threat Researcher', 'Research adversaries.').relevanceScore >= 62);
+check('Cyber firm registered as "Security Services" keeps its threat hunters', !classify('Threat Hunter', 'Hunt adversaries across EDR telemetry, write detections, respond to incidents and malware.', '', 'eSentire Security Services Inc.').rejected);
+check('OT/ICS specialist at a cyber firm named "Security Services" kept', !classify('OT/ICS Security Specialist', 'Protect plant networks.', '', 'eSentire Security Services Inc.').rejected);
+check('Generic Security Supervisor at a guarding company rejected', classify('Security Supervisor', 'Schedule staff and manage client sites.', '', 'Paladin Security Services').rejected);
 check('IT Security Manager at a guarding company kept', !classify('IT Security Manager', 'Manage firewalls, SIEM and endpoint security for our systems.', '', 'Bravo Security Services').rejected);
 check('Health centre with a real security description kept', !classify('informatics security consultant', 'Work 37.5 hours per week securing clinical systems. Firewall administration, vulnerability scanning and security awareness training.', '', 'Durham Community Health Centre').rejected);
 
