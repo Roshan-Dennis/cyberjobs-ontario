@@ -28,13 +28,20 @@ const cards = (page: Page) => page.locator('article');
 
 async function count(page: Page): Promise<number> {
   const el = page.getByTestId('result-count');
-  await expect(el).toContainText('jobs');
+  await expect(el).toContainText(/\bjobs?\b/);
   return Number((await el.innerText()).replace(/[^\d]/g, ''));
 }
 
-/** Open a sidebar group if it is collapsed. */
+/** Open "More filters" if it is closed. */
+async function openMore(page: Page) {
+  const more = filters(page).getByRole('button', { name: /^More filters/ });
+  if ((await more.getAttribute('aria-expanded')) === 'false') await more.click();
+}
+
+/** Open a sidebar group if it is collapsed (looking under "More filters" too). */
 async function openSection(page: Page, title: RegExp) {
-  const header = filters(page).getByRole('button', { name: title });
+  if ((await filters(page).locator('section > button', { hasText: title }).count()) === 0) await openMore(page);
+  const header = filters(page).locator('section > button', { hasText: title });
   if ((await header.getAttribute('aria-expanded')) === 'false') await header.click();
 }
 
@@ -127,7 +134,8 @@ test.describe('filters', () => {
     await home(page);
     const headers = filters(page).locator('section > button[aria-expanded]');
     const n = await headers.count();
-    expect(n).toBeGreaterThan(8);
+    // Five groups up front; the rest sit behind "More filters".
+    expect(n).toBe(5);
     for (let i = 0; i < n; i += 1) {
       const h = headers.nth(i);
       const was = await h.getAttribute('aria-expanded');
@@ -143,6 +151,7 @@ test.describe('filters', () => {
     await home(page);
     const all = await count(page);
     // Expand everything so every checkbox is reachable.
+    await openMore(page);
     const headers = filters(page).locator('section > button[aria-expanded="false"]');
     while ((await headers.count()) > 0) await headers.first().click();
     const more = filters(page).getByRole('button', { name: /^Show \d+ more$/ });
@@ -203,6 +212,9 @@ test.describe('filters', () => {
     await panel.getByRole('button', { name: 'Any time', exact: true }).click();
     await expect.poll(() => count(page)).toBe(all);
 
+    // The custom range stays out of the way until asked for.
+    await expect(panel.getByLabel('From', { exact: true })).toHaveCount(0);
+    await panel.getByRole('button', { name: 'Custom', exact: true }).click();
     const from = new Date(Date.now() - 10 * 86_400_000).toISOString().slice(0, 10);
     await panel.getByLabel('From', { exact: true }).fill(from);
     await expect(page).toHaveURL(/from=/);
@@ -216,7 +228,8 @@ test.describe('filters', () => {
     await expect(clear).toBeEnabled();
     await clear.click();
     await expect.poll(() => count(page)).toBe(all);
-    await expect(panel.getByLabel('From', { exact: true })).toHaveValue('');
+    await expect(panel.getByLabel('From', { exact: true })).toHaveCount(0);
+    await expect(panel.getByRole('button', { name: 'Any time', exact: true })).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('salary box waits for typing to finish', async ({ page }) => {
@@ -375,6 +388,58 @@ test.describe('job detail page', () => {
     await page.getByRole('link', { name: 'Back to job search' }).click();
     await expect(cards(page).first()).toBeVisible();
     errors.length = 0; // the 404 response itself is logged by the browser
+  });
+});
+
+test.describe('filter panel layout', () => {
+  test('active filters show as pills that remove one filter each', async ({ page }) => {
+    await home(page, 'arrangement=onsite&experience=senior');
+    const bar = page.getByLabel('Active filters');
+    await expect(bar.getByText('On-site', { exact: true })).toBeVisible();
+    await expect(bar.getByText('Senior', { exact: true })).toBeVisible();
+    await bar.getByRole('button', { name: 'Remove filter: On-site' }).click();
+    await expect(page).not.toHaveURL(/arrangement=/);
+    await expect(page).toHaveURL(/experience=senior/);
+    await expect(filters(page).locator('input[name="arrangement"][value="onsite"]')).not.toBeChecked();
+    await home(page, 'arrangement=onsite&experience=senior');
+    await page.getByLabel('Active filters').getByRole('button', { name: 'Clear all' }).click();
+    await expect(page.getByLabel('Active filters')).toHaveCount(0);
+  });
+
+  test('a zero-result selection keeps its proper label', async ({ page }) => {
+    await page.goto('./?arrangement=remote&city=Nowhere');
+    await expect(filters(page).locator('label', { has: page.locator('input[name="arrangement"][value="remote"]') })).toContainText('Remote');
+  });
+
+  test('"More filters" holds the secondary groups and opens itself when one is active', async ({ page }) => {
+    await home(page);
+    const more = filters(page).getByRole('button', { name: /^More filters/ });
+    await expect(more).toHaveAttribute('aria-expanded', 'false');
+    await expect(filters(page).locator('section > button', { hasText: 'Company' })).toHaveCount(0);
+    await more.click();
+    await expect(filters(page).locator('section > button', { hasText: 'Company' })).toBeVisible();
+
+    await home(page, 'company=BlackBerry');
+    await expect(filters(page).getByRole('button', { name: /^More filters/ })).toHaveAttribute('aria-expanded', 'true');
+    await expect(filters(page).locator('input[name="companies"][value="BlackBerry"]')).toBeChecked();
+  });
+
+  test('long lists are searchable', async ({ page }) => {
+    await home(page);
+    await openSection(page, /^Company/);
+    const search = filters(page).getByPlaceholder('Search companies');
+    await search.fill('black');
+    const names = await filters(page).locator('input[name="companies"]').evaluateAll((els) => els.map((e) => (e as HTMLInputElement).value));
+    expect(names.length).toBeGreaterThan(0);
+    for (const n of names) expect(n.toLowerCase()).toContain('black');
+    await search.fill('zzzz');
+    await expect(filters(page).getByText(/No match for/)).toBeVisible();
+
+    const cities = filters(page).getByPlaceholder('Search cities');
+    await cities.fill('otta');
+    await expect(filters(page).locator('input[name="cities"][value="Ottawa"]')).toBeVisible();
+    await filters(page).locator('input[name="cities"][value="Ottawa"]').click();
+    await expect(page).toHaveURL(/city=Ottawa/);
   });
 });
 
