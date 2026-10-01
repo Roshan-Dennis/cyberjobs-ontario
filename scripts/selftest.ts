@@ -9,7 +9,7 @@
  *   npm run selftest
  */
 import { normalizeJob, isMeaningfulDescription, DEFAULT_NORMALIZE_OPTIONS } from '../src/lib/normalize';
-import { dedupeJobs } from '../src/lib/normalize/dedupe';
+import { dedupeJobs, companyKey } from '../src/lib/normalize/dedupe';
 import { searchJobs, filtersFromSearchParams, searchParamsFromFilters, countActiveFilters } from '../src/lib/query';
 import { parseSalary } from '../src/lib/normalize/salary';
 import { matchLocation } from '../src/lib/taxonomy/canada';
@@ -859,6 +859,68 @@ check('Hide-pathway option counts as active', countActiveFilters({ includePathwa
   check('Calgary searches Alberta', li({ cities: ['Calgary'] }, 'Alberta') === 'Calgary, Alberta, Canada', li({ cities: ['Calgary'] }, 'Alberta'));
   check('Quebec filter searches Quebec', li({ provinces: ['QC'] }) === 'Quebec, Canada', li({ provinces: ['QC'] }));
   check('No filter keeps Ontario default', li({}) === 'Ontario, Canada', li({}));
+}
+
+
+/* ------------------------------------------------------------------ */
+section('Off-topic and mis-titled postings found on the live board');
+
+// Company boilerplate that mentions security must not admit an unrelated title.
+const OKTA_BOILERPLATE = 'Okta is The World\'s Identity Company. We secure identity, threat detection, phishing-resistant MFA, zero trust, incident response, identity and access, encryption, SIEM integrations, vulnerability management and security posture for every customer. Cyber threats evolve; our security team works on malware and forensic investigations.';
+check('Marketing Automation Manager at a security vendor rejected', classify('Marketing Automation Manager, AI Journey', OKTA_BOILERPLATE).rejected);
+check('Solutions Consultant rejected despite security boilerplate', classify('Senior Solutions Consultant - Fluent in Portuguese/English', OKTA_BOILERPLATE).rejected);
+check('Software Systems Designer rejected', classify('Software Systems Designer', OKTA_BOILERPLATE).rejected);
+check('Identity Engineer is a security title', !classify('Senior Identity Engineer', OKTA_BOILERPLATE).rejected && classify('Senior Identity Engineer', OKTA_BOILERPLATE).relevanceScore >= 62);
+check('Cyber operations title still accepted on body evidence', !classify('Cyber Operations Strategist, Critical Harm Operations', OKTA_BOILERPLATE).rejected);
+check('Fraud operations still accepted on body evidence', !classify('Senior Fraud Operations Analyst', OKTA_BOILERPLATE).rejected);
+
+// "Systems engineer" in ML / distributed-systems work is not a pathway into security.
+check('ML System Engineer is not a pathway role', classify('Principal ML System Engineer', 'Build training infrastructure. Security of model artifacts matters.').isPathwayRole === false);
+check('Distributed Systems Engineer is not a pathway role', classify('Distributed Systems Engineer (Data Platform)', 'Internet-scale scanning of threats and vulnerabilities.').isPathwayRole === false);
+check('Systems Administrator is still a pathway role', classify('IT Systems Administrator', 'Patch servers, manage firewall rules and MFA.').isPathwayRole === true);
+
+// Titles the description does not support.
+const EYECARE = 'Job Summary: Specsavers is looking for experienced retail sales associates and eyecare consultants to join our team. No experience in optics required. You will greet customers, help them choose frames and book eye tests.';
+check('Retail description under a cyber title rejected', classify('Cybersecurity Consultant', EYECARE, '', 'Specsavers Scottsdale Delta').rejected);
+check('Restaurant franchise with no description rejected', classify('Cybersecurity Manager', '', '', 'SUBWAY Rive-Nord').rejected);
+check('Coffee franchise with no description rejected', classify('Cybersecurity Manager', '', '', 'TIM HORTONS Gestion Carrière Goyette Inc.').rejected);
+check('Home-care agency with no description rejected', classify('Cybersecurity Manager', '', '', 'Soins Idéal / Ideal Care').rejected);
+check('Staffing firm with no description kept', !classify('Cybersecurity Manager', '', '', 'Labranche RH').rejected);
+check('Guarding company Security Manager rejected', classify('Security Manager', 'Tasks: Co-ordinate administrative services. Manage the operations of a department.', '', 'BRAVO SECURITY SERVICES LTD.').rejected);
+check('IT Security Manager at a guarding company kept', !classify('IT Security Manager', 'Manage firewalls, SIEM and endpoint security for our systems.', '', 'Bravo Security Services').rejected);
+check('Health centre with a real security description kept', !classify('informatics security consultant', 'Work 37.5 hours per week securing clinical systems. Firewall administration, vulnerability scanning and security awareness training.', '', 'Durham Community Health Centre').rejected);
+
+// Generic security titles get a real category instead of "Other".
+const cat = (t: string) => classify(t, 'SIEM, incident response, vulnerability management, firewall, encryption, threat detection, phishing and MFA across our security operations.').category;
+check('Cybersecurity Manager -> Security Leadership', cat('Cybersecurity Manager') === 'security_leadership', cat('Cybersecurity Manager'));
+check('QNX Senior Cybersecurity Manager -> Security Leadership', cat('QNX Senior Cybersecurity Manager') === 'security_leadership', cat('QNX Senior Cybersecurity Manager'));
+check('Cybersecurity Advisor -> GRC', cat('Cybersecurity Advisor') === 'grc', cat('Cybersecurity Advisor'));
+check('Security advisor -> GRC', cat('Security advisor') === 'grc', cat('Security advisor'));
+check('Cyber Security Co-op -> SOC / Security Analysis', cat('Cyber Security Co-op/Intern – JEDI Partnership') === 'soc_analysis', cat('Cyber Security Co-op/Intern – JEDI Partnership'));
+check('Security Researcher -> Penetration Testing', cat('QNX Senior Security Researcher') === 'penetration_testing', cat('QNX Senior Security Researcher'));
+check('Security Service Manager -> Security Leadership', cat('Security Service Manager') === 'security_leadership', cat('Security Service Manager'));
+
+// One employer under two names is one employer.
+check('BlackBerry QNX and BlackBerry share a company key', companyKey('BlackBerry QNX') === companyKey('BlackBerry'), [companyKey('BlackBerry QNX'), companyKey('BlackBerry')]);
+
+// "$170, 000" — a comma followed by a space is still a thousands separator.
+const spaced = parseSalary('$170, 000 to $200, 000');
+check('Comma-space thousands separator parsed', spaced.min === 170000 && spaced.max === 200000 && spaced.period === 'year', spaced);
+
+// Carried postings with raw HTML are cleaned on the next run.
+{
+  const tagged = { ...mk('html-carried'), description: '<p><strong>Let\'s build something amazing together!</strong><br><br>Our IT team keeps platforms secure with firewall and SIEM work.</p>', summary: '<p><strong>Let\'s build something amazing together!</strong>' };
+  const [healed] = revalidate([tagged]).jobs;
+  check('Carried description loses its HTML tags', !!healed && !/<[a-z]/i.test(healed.description), healed?.description);
+  check('Carried summary loses its HTML tags', !!healed && !/<[a-z]/i.test(healed.summary) && healed.summary.startsWith("Let's build"), healed?.summary);
+}
+
+// A duplicate carried under an old fingerprint collapses once re-fingerprinted.
+{
+  const a = { ...mk('bb-1', { company: 'BlackBerry', title: 'QNX Senior Security Researcher', titleRaw: 'QNX Senior Security Researcher', locationRaw: 'Ottawa, ON', city: 'Ottawa' }), fingerprint: 'old-a' };
+  const b = { ...mk('bb-2', { company: 'BlackBerry QNX', title: 'QNX Senior Security Researcher', titleRaw: 'QNX Senior Security Researcher', locationRaw: 'Ottawa, ON', city: 'Ottawa' }), fingerprint: 'old-b' };
+  const [ra, rb] = revalidate([a, b]).jobs;
+  check('Two-name duplicates get the same fingerprint', !!ra && !!rb && ra.fingerprint === rb.fingerprint, [ra?.fingerprint, rb?.fingerprint]);
 }
 
 /* ------------------------------------------------------------------ */
