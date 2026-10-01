@@ -42,7 +42,7 @@ const PATHWAY_TITLE_FR_RE =
   /\b(soutien informatique|support informatique|technicien(ne)? (informatique|en informatique|reseau|de reseau)|administrateur (de )?(systeme|systemes|reseau|reseaux)|analyste (de )?(systeme|systemes|reseau|reseaux)|centre d assistance|service d assistance|infonuagique|devops)\b/i;
 
 const CORE_TITLE_RE =
-  /\b(cyber\s*-?\s*security|cybersecurity|information security|infosec|security (analyst|engineer|architect|specialist|consultant|administrator|manager|director|operations|advisor|officer|developer|researcher|lead|technician|coordinator)|soc analyst|soc engineer|siem|grc|iam|identity and access|identity (engineer|architect|analyst|specialist|administrator)|pam|privileged access|dfir|forensic|penetration test(er|ers|ing|s)?|pentest(er|ers|ing|s)?|red team|blue team|purple team|threat (intel|hunt|research)|vulnerability (management|analyst|engineer)|appsec|application security|product security|devsecops|cloud security|network security|ciso|incident (response|responder|handler)|malware (analyst|researcher)|security operations|detection (engineer|engineering)|trust (and|&) safety engineer|cryptograph(er|y) engineer|iso\s*27001|security assurance)\b/i;
+  /\b(cyber\s*-?\s*security|cybersecurity|information security|infosec|security (analyst|engineer|architect|specialist|consultant|administrator|manager|director|operations|advisor|officer|developer|researcher|lead|technician|coordinator)|soc analyst|soc engineer|siem|grc|iam|identity and access|identity (engineer|architect|analyst|specialist|administrator)|pam|privileged access|dfir|forensic|penetration test(er|ers|ing|s)?|pentest(er|ers|ing|s)?|red team|blue team|purple team|threat (intel\w*|hunt\w*|research\w*)|vulnerability (management|analyst|engineer)|appsec|application security|product security|devsecops|cloud security|network security|ciso|incident (response|responder|handler)|malware (analyst|researcher)|security operations|detection (engineer|engineering)|trust (and|&) safety engineer|cryptograph(er|y) engineer|iso\s*27001|security assurance)\b/i;
 
 const SUPPORTING_BODY_RE =
   /\b(siem|soc\b|edr\b|xdr\b|soar\b|mitre att&ck|nist|iso 27001|soc 2|threat|vulnerabilit(y|ies)|penetration test(er|ers|ing|s)?|incident(s| response| handling)|phishing|malware|firewall|zero trust|security (controls|posture|operations|team|tooling|patches|awareness)|risk assessment|encryption|iam\b|identity and access|sigma rules|detection engineering|cyber|forensic|pen test(er|ers|ing|s)?|red team|blue team|hardening|least privilege|mfa\b|multi-factor)\b/gi;
@@ -95,10 +95,16 @@ export function classify(title: string, description: string, department = '', co
   // description check also runs on an accent-stripped copy ("Café", "sécurité").
   const companyFr = deaccent(company);
   const descFr = deaccent(desc);
+  // Security work in the description itself, as opposed to in the title.
+  const descHits = (desc.match(SUPPORTING_BODY_RE) ?? []).length + (descFr.match(SUPPORTING_BODY_FR_RE) ?? []).length;
+  // "Security Services" in a name is also how real cyber firms are registered
+  // (eSentire Security Services Inc.), so the employer name alone never
+  // decides: the posting must also show no security work.
   if (
     (PHYSICAL_SECURITY_EMPLOYER_RE.test(company) || PHYSICAL_SECURITY_EMPLOYER_RE.test(companyFr)) &&
     !TECHNICAL_TITLE_QUALIFIER_RE.test(t) &&
-    !TECHNICAL_TITLE_QUALIFIER_RE.test(tFr)
+    !TECHNICAL_TITLE_QUALIFIER_RE.test(tFr) &&
+    descHits === 0
   ) {
     return reject('Physical security employer');
   }
@@ -109,9 +115,8 @@ export function classify(title: string, description: string, department = '', co
   }
   // Restaurants, retailers and care agencies posting under an IT title are
   // kept only when their own description shows security work.
-  if (NON_TECH_EMPLOYER_RE.test(company) || NON_TECH_EMPLOYER_RE.test(companyFr)) {
-    const descHits = (desc.match(SUPPORTING_BODY_RE) ?? []).length + (descFr.match(SUPPORTING_BODY_FR_RE) ?? []).length;
-    if (descHits === 0) return reject('Title does not match the employer');
+  if ((NON_TECH_EMPLOYER_RE.test(company) || NON_TECH_EMPLOYER_RE.test(companyFr)) && descHits === 0) {
+    return reject('Title does not match the employer');
   }
 
   // --- Signals ---------------------------------------------------------
