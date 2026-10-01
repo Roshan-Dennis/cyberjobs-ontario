@@ -923,6 +923,16 @@ check('Comma-space thousands separator parsed', spaced.min === 170000 && spaced.
   check('Two-name duplicates get the same fingerprint', !!ra && !!rb && ra.fingerprint === rb.fingerprint, [ra?.fingerprint, rb?.fingerprint]);
 }
 
+// A carried posting filed under "Other" is re-filed once a rule covers it;
+// a posting already in a real category is left alone.
+{
+  const stuck = { ...mk('other-carried', { title: 'Cybersecurity Manager', titleRaw: 'Cybersecurity Manager', company: 'Labranche RH' }), category: 'other' as const };
+  const settled = { ...mk('grc-carried', { title: 'Cybersecurity Manager', titleRaw: 'Cybersecurity Manager', company: 'Acme' }), category: 'grc' as const };
+  const [s1, s2] = revalidate([stuck, settled]).jobs;
+  check('Carried "Other" re-filed under its category', s1?.category === 'security_leadership', s1?.category);
+  check('Carried real category left alone', s2?.category === 'grc', s2?.category);
+}
+
 /* ------------------------------------------------------------------ */
 console.log(`\n${'='.repeat(70)}`);
 console.log(`${passed} passed, ${failed} failed`);
