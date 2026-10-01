@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import type { Facet, JobFilters, JobSearchResult } from '@/lib/types';
-import { EXPERIENCE_LEVELS, EXPERIENCE_LABELS } from '@/lib/types';
+import { CATEGORY_LABELS, EMPLOYMENT_LABELS, EXPERIENCE_LEVELS, EXPERIENCE_LABELS } from '@/lib/types';
 import { countActiveFilters } from '@/lib/query';
 
 interface Props {
@@ -22,18 +22,51 @@ const DATE_OPTIONS: { label: string; value: number | undefined }[] = [
   { label: '30 days', value: 30 },
 ];
 
-/**
- * City sections, in the order they appear in the sidebar. Ontario leads because
- * it carries most of the postings; 'other' collects remote and unplaced roles.
- */
-const CITY_GROUPS: { key: string; title: string }[] = [
-  { key: 'ON', title: 'Ontario cities' },
-  { key: 'QC', title: 'Quebec cities' },
-  { key: 'BC', title: 'B.C. cities' },
-  { key: 'AB', title: 'Alberta cities' },
-  { key: 'other', title: 'Remote & unplaced' },
-];
+/** Short province names: they sit in pills, where "British Columbia" wraps. */
+const PROVINCE_SHORT: Record<string, string> = {
+  ON: 'Ontario',
+  BC: 'B.C.',
+  QC: 'Quebec',
+  AB: 'Alberta',
+  other: 'Remote / other',
+};
 
+const ARRANGEMENT_NAMES: Record<string, string> = {
+  remote: 'Remote',
+  hybrid: 'Hybrid',
+  onsite: 'On-site',
+  unknown: 'Not specified',
+};
+
+const lookup =
+  (map: Record<string, string>) =>
+  (value: string): string =>
+    map[value] ?? value;
+
+function Chevron({ open }: { open: boolean }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 16 16"
+      className={`h-4 w-4 shrink-0 text-muted transition-transform duration-150 motion-reduce:transition-none ${open ? 'rotate-180' : ''}`}
+    >
+      <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CountBadge({ n }: { n?: number }) {
+  if (!n) return null;
+  return (
+    <span className="rounded-full bg-brand/15 px-1.5 py-px text-[11px] font-semibold tabular-nums text-brand">{n}</span>
+  );
+}
+
+/**
+ * One filter group. Groups are separated by a hairline rather than each being
+ * boxed: eighteen stacked boxes read as a wall, while one surface with quiet
+ * dividers reads as a single control panel.
+ */
 function Section({
   title,
   children,
@@ -56,30 +89,93 @@ function Section({
     if (count && !hadSelection.current) setOpen(true);
     hadSelection.current = Boolean(count);
   }, [count]);
+  const bodyId = useId();
   // A group with no options and nothing selected cannot be acted on, so it is
   // dropped entirely rather than rendered as a row of "No options".
   if (empty) return null;
-  // Each filter group is its own bordered card. Grouping by outline rather than
-  // by divider line means a long sidebar still parses as discrete choices
-  // instead of one continuous wall of checkboxes.
   return (
-    <section className="rounded-lg border border-line bg-surface">
+    <section>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-surface2"
+        className="flex w-full items-center justify-between gap-2 rounded-md py-3 text-left text-sm font-medium text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         aria-expanded={open}
+        aria-controls={bodyId}
       >
-        <span className="label">
+        <span className="flex items-center gap-2">
           {title}
-          {count ? <span className="ml-1 normal-case text-accent">({count})</span> : null}
+          <CountBadge n={count} />
         </span>
-        <span aria-hidden className="text-sm leading-none text-muted">
-          {open ? '−' : '+'}
-        </span>
+        <Chevron open={open} />
       </button>
-      {open ? <div className="space-y-1.5 border-t border-line px-3 py-3">{children}</div> : null}
+      {open ? (
+        <div id={bodyId} className="pb-4">
+          {children}
+        </div>
+      ) : null}
     </section>
+  );
+}
+
+/** Facets plus any selected value missing from them, so it can be undone. */
+function withSelected(facets: Facet[], selected: string[], label: (v: string) => string = (v) => v): Facet[] {
+  const missing = selected.filter((v) => !facets.some((f) => f.value === v)).map((v) => ({ value: v, label: label(v), count: 0 }));
+  return [...facets, ...missing];
+}
+
+/**
+ * Multi-select pills, for short lists (experience, arrangement, province).
+ * Each pill is a real checkbox laid over its label, so it keeps keyboard,
+ * screen-reader and form semantics. Selected pills are tinted with a tick;
+ * the solid fill is kept for single-choice pills (date posted), so the two
+ * kinds never look alike.
+ */
+function PillChecks({
+  name,
+  facets,
+  selected,
+  onToggle,
+  labelFor,
+}: {
+  name: string;
+  facets: Facet[];
+  selected: string[];
+  onToggle: (value: string) => void;
+  /** Label for a selected value that has no results (so no facet to read it from). */
+  labelFor?: (value: string) => string;
+}) {
+  const all = withSelected(facets, selected, labelFor);
+  if (all.length === 0) return <p className="text-xs text-muted">No options for the current results</p>;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {all.map((f) => {
+        const on = selected.includes(f.value);
+        return (
+          <label
+            key={f.value}
+            className={`relative inline-flex cursor-pointer select-none items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors focus-within:ring-2 focus-within:ring-accent ${
+              on ? 'border-brand/60 bg-brand/15 text-ink' : 'border-line bg-surface2 text-muted hover:border-muted/50 hover:text-ink'
+            }`}
+          >
+            <input
+              type="checkbox"
+              name={name}
+              value={f.value}
+              checked={on}
+              onChange={() => onToggle(f.value)}
+              className="absolute inset-0 h-full w-full cursor-pointer appearance-none rounded-full opacity-0"
+            />
+            {on ? (
+              <svg aria-hidden viewBox="0 0 16 16" className="h-3 w-3 text-brand">
+                <path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : null}
+            <span>{f.label}</span>
+            <span className="tabular-nums opacity-60">{f.count}</span>
+          </label>
+        );
+      })}
+    </div>
   );
 }
 
@@ -90,13 +186,21 @@ function Section({
  */
 const expandedGroups = new Set<string>();
 
+/**
+ * Checkbox list for longer facets. Shows the top few; a search field appears
+ * once there are more than that, so a list of sixty employers is one short
+ * list plus a box to type in rather than a scroll.
+ */
 function CheckList({
   name,
   facets,
   selected,
   onToggle,
-  limit = 8,
-  emptyLabel = 'No options',
+  limit = 6,
+  emptyLabel = 'No options for the current results',
+  searchLabel,
+  describe,
+  labelFor,
 }: {
   /** Form name of the group, e.g. "experience". */
   name: string;
@@ -105,8 +209,15 @@ function CheckList({
   onToggle: (value: string) => void;
   limit?: number;
   emptyLabel?: string;
+  /** Placeholder for the search box, e.g. "Search companies". */
+  searchLabel?: string;
+  /** Secondary text after a label, e.g. the province of a city. */
+  describe?: (value: string) => string | undefined;
+  /** Label for a selected value that has no results (so no facet to read it from). */
+  labelFor?: (value: string) => string;
 }) {
   const [expanded, setExpandedState] = useState(() => expandedGroups.has(name));
+  const [query, setQuery] = useState('');
   const setExpanded = (fn: (e: boolean) => boolean) =>
     setExpandedState((e) => {
       const next = fn(e);
@@ -114,47 +225,94 @@ function CheckList({
       else expandedGroups.delete(name);
       return next;
     });
+
   // A ticked value must stay on screen even when the current results no longer
   // contain it — otherwise the only way to undo it is "Clear all filters".
-  // Selected entries missing from the facet list are added back with a zero
-  // count, and selected entries always sort into the visible slice.
-  const missing = selected
-    .filter((v) => !facets.some((f) => f.value === v))
-    .map((v) => ({ value: v, label: v, count: 0 }));
-  const all = [...facets, ...missing];
+  const all = withSelected(facets, selected, labelFor);
   if (all.length === 0) return <p className="text-xs text-muted">{emptyLabel}</p>;
-  const ordered = expanded
-    ? all
-    : [...all.filter((f) => selected.includes(f.value)), ...all.filter((f) => !selected.includes(f.value))]
-        .slice(0, Math.max(limit, selected.length))
-        .sort((a, b) => all.indexOf(a) - all.indexOf(b));
-  const visible = ordered;
-  const hiddenCount = all.length - visible.length;
+
+  const q = query.trim().toLowerCase();
+  const matching = q ? all.filter((f) => f.label.toLowerCase().includes(q) || selected.includes(f.value)) : all;
+  const visible =
+    expanded || q
+      ? matching
+      : [...all.filter((f) => selected.includes(f.value)), ...all.filter((f) => !selected.includes(f.value))]
+          .slice(0, Math.max(limit, selected.length))
+          .sort((a, b) => all.indexOf(a) - all.indexOf(b));
+  const hiddenCount = q ? 0 : all.length - visible.length;
+  const searchable = Boolean(searchLabel) && all.length > limit;
 
   return (
-    <>
-      {visible.map((f) => (
-        <label key={f.value} className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            name={name}
-            value={f.value}
-            className="h-4 w-4 shrink-0 rounded border-line accent-[rgb(var(--accent))]"
-            checked={selected.includes(f.value)}
-            onChange={() => onToggle(f.value)}
-          />
-          <span className="min-w-0 flex-1 truncate" title={f.label}>
-            {f.label}
-          </span>
-          <span className="shrink-0 text-xs text-muted">{f.count}</span>
-        </label>
-      ))}
-      {hiddenCount > 0 || expanded ? (
-        <button type="button" className="text-xs text-brand hover:underline" onClick={() => setExpanded((e) => !e)}>
+    <div className="space-y-1">
+      {searchable ? (
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={searchLabel}
+          aria-label={searchLabel}
+          className="input mb-1.5 py-1.5 text-xs"
+        />
+      ) : null}
+      {visible.map((f) => {
+        const extra = describe?.(f.value);
+        return (
+          <label
+            key={f.value}
+            className="flex cursor-pointer items-center gap-2.5 rounded-md px-1 py-1 text-sm hover:bg-surface2"
+          >
+            <input
+              type="checkbox"
+              name={name}
+              value={f.value}
+              className="h-4 w-4 shrink-0 rounded border-line accent-[rgb(var(--brand))]"
+              checked={selected.includes(f.value)}
+              onChange={() => onToggle(f.value)}
+            />
+            <span className="min-w-0 flex-1 truncate" title={f.label}>
+              {f.label}
+              {extra ? <span className="ml-1.5 text-xs text-muted">{extra}</span> : null}
+            </span>
+            <span className="text-xs tabular-nums text-muted">{f.count}</span>
+          </label>
+        );
+      })}
+      {q && matching.length === 0 ? <p className="px-1 text-xs text-muted">No match for &ldquo;{query}&rdquo;</p> : null}
+      {hiddenCount > 0 || (expanded && !q) ? (
+        <button
+          type="button"
+          className="px-1 pt-1 text-xs font-medium text-brand hover:underline"
+          onClick={() => setExpanded((e) => !e)}
+        >
           {expanded ? 'Show less' : `Show ${hiddenCount} more`}
         </button>
       ) : null}
-    </>
+    </div>
+  );
+}
+
+function OptionCheck({
+  name,
+  checked,
+  onChange,
+  children,
+}: {
+  name: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex cursor-pointer items-start gap-2.5 rounded-md px-1 py-1 text-sm hover:bg-surface2">
+      <input
+        type="checkbox"
+        name={name}
+        className="mt-0.5 h-4 w-4 shrink-0 rounded border-line accent-[rgb(var(--brand))]"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span>{children}</span>
+    </label>
   );
 }
 
@@ -203,7 +361,23 @@ function SalaryInput({ value, onCommit }: { value: number | undefined; onCommit:
   );
 }
 
-export function FilterPanel({ filters, facets, total, onChange, onReset }: Props) {
+/** Filters that live under "More filters". */
+function countSecondary(f: JobFilters): number {
+  return (
+    (f.employment?.length ?? 0) +
+    (f.companies?.length ?? 0) +
+    (f.certifications?.length ?? 0) +
+    (f.skills?.length ?? 0) +
+    (f.sources?.length ?? 0) +
+    (f.salaryMin ? 1 : 0) +
+    (f.hasSalary ? 1 : 0) +
+    (f.onlyPathway ? 1 : 0) +
+    (f.includePathway === false ? 1 : 0) +
+    (f.includeExpired ? 1 : 0)
+  );
+}
+
+export function FilterPanel({ filters, facets, onChange, onReset }: Props) {
   const toggler =
     (key: keyof JobFilters) =>
     (value: string): void => {
@@ -215,6 +389,24 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
   const activeCount = countActiveFilters(filters);
   const canReset = activeCount > 0 || Boolean(filters.q) || Boolean(filters.sort && filters.sort !== 'relevance');
 
+  // Five groups cover nearly every search; the rest wait behind one toggle.
+  // It opens by itself when one of its filters is set from elsewhere (a
+  // certification tag on a card, a shared link), so a filter is never active
+  // and out of sight.
+  const secondaryCount = countSecondary(filters);
+  const [moreOpen, setMoreOpen] = useState(secondaryCount > 0);
+  const hadSecondary = useRef(secondaryCount > 0);
+  useEffect(() => {
+    if (secondaryCount > 0 && !hadSecondary.current) setMoreOpen(true);
+    hadSecondary.current = secondaryCount > 0;
+  }, [secondaryCount]);
+
+  const customDates = Boolean(filters.postedFrom || filters.postedTo);
+  const [showCustom, setShowCustom] = useState(customDates);
+  useEffect(() => {
+    if (customDates) setShowCustom(true);
+  }, [customDates]);
+
   // 'unknown' is listed last rather than omitted: roughly a third of postings
   // state no seniority, and dropping the option meant anyone filtering for
   // junior work silently lost that third of the board.
@@ -225,223 +417,292 @@ export function FilterPanel({ filters, facets, total, onChange, onReset }: Props
     })
     .filter((f) => f.count > 0 || (filters.experience ?? []).includes(f.value as never));
 
+  const provinceFacets: Facet[] = (facets?.provinces ?? []).map((f) => ({ ...f, label: PROVINCE_SHORT[f.value] ?? f.label }));
+
+  // One city list for every province, each city tagged with its province, in
+  // place of five separate per-province sections.
+  const cityProvince = new Map<string, string>();
+  for (const [prov, group] of Object.entries(facets?.citiesByProvince ?? {})) {
+    for (const f of group) if (!cityProvince.has(f.value)) cityProvince.set(f.value, prov);
+  }
+  const cityFacets: Facet[] = (facets?.cities ?? []).map((f) => ({
+    ...f,
+    label: f.value === 'Other' ? 'Other locations' : f.value,
+  }));
+
+  const anyTime = !filters.postedWithinDays && !customDates && !showCustom;
+  const locationCount = (filters.provinces?.length ?? 0) + (filters.cities?.length ?? 0);
+
   return (
-    <aside className="card p-3" aria-label="Filters">
-      <div className="mb-3">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-sm font-semibold">
-            Filters{' '}
-            {activeCount > 0 ? (
-              <span className="ml-0.5 rounded-full bg-accent/15 px-1.5 py-0.5 text-xs font-semibold text-accent">
-                {activeCount}
-              </span>
-            ) : null}
-          </h2>
-          <span className="text-xs tabular-nums text-muted">{total.toLocaleString('en-CA')} jobs</span>
-        </div>
+    <aside className="card px-4 pb-2 pt-3" aria-label="Filters">
+      <div className="flex items-center justify-between gap-2 border-b border-line pb-3">
+        <h2 className="flex items-center gap-2 text-base font-semibold">
+          Filters
+          <CountBadge n={activeCount} />
+        </h2>
         {/* Always present, disabled when there is nothing to clear — a control
             that appears and disappears makes the panel jump as you filter. */}
         <button
           type="button"
-          onClick={onReset}
+          onClick={() => {
+            setShowCustom(false);
+            onReset();
+          }}
           disabled={!canReset}
-          className="btn mt-2.5 w-full py-1.5 text-xs"
+          className="rounded-md text-sm font-medium text-brand hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default disabled:text-muted/60 disabled:no-underline"
         >
           Clear all filters
         </button>
       </div>
 
-      <div className="space-y-2">
-
-      {/* Province leads the sidebar: with four provinces covered it is the
-          first cut most people make, and it is the one filter whose absence
-          would make the board look wrong to someone outside Ontario. */}
-      <Section title="Province" count={filters.provinces?.length} empty={(facets?.provinces ?? []).length <= 1 && !(filters.provinces?.length ?? 0) && !(filters.cities?.length ?? 0)}>
-        <CheckList
-          name="provinces"
-          facets={facets?.provinces ?? []}
-          selected={filters.provinces ?? []}
-          onToggle={toggler('provinces')}
-          limit={6}
-        />
-      </Section>
-
-      <Section title="Date posted">
+      <div className="divide-y divide-line">
+      <Section title="Date posted" count={filters.postedWithinDays || customDates ? 1 : undefined}>
         <div className="flex flex-wrap gap-1.5">
-          {DATE_OPTIONS.map((o) => (
-            <button
-              key={o.label}
-              type="button"
-              onClick={() => onChange({ postedWithinDays: o.value, postedFrom: undefined, postedTo: undefined, page: 1 })}
-              className={`chip ${
-                (o.value === undefined
-                  ? !filters.postedWithinDays && !filters.postedFrom && !filters.postedTo
-                  : filters.postedWithinDays === o.value)
-                  ? 'chip-active'
-                  : ''
-              }`}
-              aria-pressed={
-                o.value === undefined
-                  ? !filters.postedWithinDays && !filters.postedFrom && !filters.postedTo
-                  : filters.postedWithinDays === o.value
-              }
-            >
-              {o.label}
-            </button>
-          ))}
+          {DATE_OPTIONS.map((o) => {
+            const on = o.value === undefined ? anyTime : filters.postedWithinDays === o.value && !showCustom;
+            return (
+              <button
+                key={o.label}
+                type="button"
+                onClick={() => {
+                  setShowCustom(false);
+                  onChange({ postedWithinDays: o.value, postedFrom: undefined, postedTo: undefined, page: 1 });
+                }}
+                className={`chip ${on ? 'chip-active' : ''}`}
+                aria-pressed={on}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => {
+              setShowCustom(true);
+              if (filters.postedWithinDays) onChange({ postedWithinDays: undefined, page: 1 });
+            }}
+            className={`chip ${showCustom ? 'chip-active' : ''}`}
+            aria-pressed={showCustom}
+          >
+            Custom
+          </button>
         </div>
-        {/* Stacked, not side by side: two date fields in a 118px column clip
+        {/* Stacked, not side by side: two date fields in a narrow column clip
             "mm/dd/yyyy" and its picker glyph in every browser we checked. */}
-        <div className="mt-2 grid gap-2">
-          <label className="block text-xs text-muted">
-            From
-            <input
-              type="date"
-              className="input mt-1"
-              value={filters.postedFrom ?? ''}
-              onChange={(e) => onChange({ postedFrom: e.target.value || undefined, postedWithinDays: undefined, page: 1 })}
-            />
-          </label>
-          <label className="block text-xs text-muted">
-            To
-            <input
-              type="date"
-              className="input mt-1"
-              value={filters.postedTo ?? ''}
-              onChange={(e) => onChange({ postedTo: e.target.value || undefined, postedWithinDays: undefined, page: 1 })}
-            />
-          </label>
-        </div>
+        {showCustom ? (
+          <div className="mt-3 grid gap-2">
+            <label className="block text-xs text-muted">
+              From
+              <input
+                type="date"
+                className="input mt-1"
+                value={filters.postedFrom ?? ''}
+                onChange={(e) => onChange({ postedFrom: e.target.value || undefined, postedWithinDays: undefined, page: 1 })}
+              />
+            </label>
+            <label className="block text-xs text-muted">
+              To
+              <input
+                type="date"
+                className="input mt-1"
+                value={filters.postedTo ?? ''}
+                onChange={(e) => onChange({ postedTo: e.target.value || undefined, postedWithinDays: undefined, page: 1 })}
+              />
+            </label>
+          </div>
+        ) : null}
       </Section>
 
-      <Section title="Experience level" count={filters.experience?.length} empty={experienceFacets.length === 0 && !(filters.experience?.length ?? 0)}>
-        <CheckList
-          name="experience"
-          facets={experienceFacets}
-          selected={filters.experience ?? []}
-          onToggle={toggler('experience')}
-          limit={12}
+      <Section
+        title="Experience level"
+        count={filters.experience?.length}
+        empty={experienceFacets.length === 0 && !(filters.experience?.length ?? 0)}
+      >
+        <PillChecks name="experience" facets={experienceFacets} selected={filters.experience ?? []} onToggle={toggler('experience')} />
+      </Section>
+
+      <Section
+        title="Work arrangement"
+        count={filters.arrangement?.length}
+        empty={(facets?.arrangement ?? []).length === 0 && !(filters.arrangement?.length ?? 0)}
+      >
+        <PillChecks
+          name="arrangement"
+          facets={facets?.arrangement ?? []}
+          selected={filters.arrangement ?? []}
+          onToggle={toggler('arrangement')}
+          labelFor={lookup(ARRANGEMENT_NAMES)}
         />
       </Section>
 
-      <Section title="Work arrangement" count={filters.arrangement?.length} empty={(facets?.arrangement ?? []).length === 0 && !(filters.arrangement?.length ?? 0)}>
-        <CheckList name="arrangement" facets={facets?.arrangement ?? []} selected={filters.arrangement ?? []} onToggle={toggler('arrangement')} limit={6} />
+      <Section
+        title="Location"
+        count={locationCount}
+        empty={provinceFacets.length === 0 && cityFacets.length === 0 && locationCount === 0}
+      >
+        {provinceFacets.length > 1 || (filters.provinces?.length ?? 0) > 0 ? (
+          <PillChecks
+            name="provinces"
+            facets={provinceFacets}
+            selected={filters.provinces ?? []}
+            onToggle={toggler('provinces')}
+            labelFor={lookup(PROVINCE_SHORT)}
+          />
+        ) : null}
+        <div className="mt-3">
+          <CheckList
+            name="cities"
+            facets={cityFacets}
+            selected={filters.cities ?? []}
+            onToggle={toggler('cities')}
+            limit={5}
+            labelFor={(v) => (v === 'Other' ? 'Other locations' : v)}
+            searchLabel="Search cities"
+            describe={(city) => {
+              const p = cityProvince.get(city);
+              return p && p !== 'other' ? p : undefined;
+            }}
+          />
+        </div>
       </Section>
 
-      <Section title="Job category" count={filters.categories?.length} empty={(facets?.categories ?? []).length === 0 && !(filters.categories?.length ?? 0)}>
-        <CheckList name="categories" facets={facets?.categories ?? []} selected={filters.categories ?? []} onToggle={toggler('categories')} limit={10} />
+      <Section
+        title="Job category"
+        count={filters.categories?.length}
+        empty={(facets?.categories ?? []).length === 0 && !(filters.categories?.length ?? 0)}
+      >
+        <CheckList
+          name="categories"
+          facets={facets?.categories ?? []}
+          selected={filters.categories ?? []}
+          onToggle={toggler('categories')}
+          limit={6}
+          labelFor={lookup(CATEGORY_LABELS as Record<string, string>)}
+        />
       </Section>
 
-      {/* One city section per province rather than a single mixed list. With
-          four provinces covered, Toronto, Calgary and Montreal appeared side by
-          side with nothing saying which province each belonged to. */}
-      {CITY_GROUPS.map(({ key, title }) => {
-        const group = facets?.citiesByProvince?.[key] ?? [];
-        const selectedHere = (filters.cities ?? []).filter((c) => group.some((f) => f.value === c));
-        // A selected city that has dropped out of every group (its postings
-        // were filtered away) is shown under "Remote & unplaced" so it can
-        // still be unticked.
-        const orphaned =
-          key === 'other'
-            ? (filters.cities ?? []).filter(
-                (c) => !Object.values(facets?.citiesByProvince ?? {}).some((g) => g.some((f) => f.value === c)),
-              )
-            : [];
-        return (
+      <div>
+        <button
+          type="button"
+          onClick={() => setMoreOpen((o) => !o)}
+          aria-expanded={moreOpen}
+          aria-controls="more-filters"
+          className="flex w-full items-center justify-between gap-2 rounded-md py-3 text-left text-sm font-medium text-brand focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        >
+          <span className="flex items-center gap-2">
+            More filters
+            <CountBadge n={secondaryCount} />
+          </span>
+          <Chevron open={moreOpen} />
+        </button>
+        <p className={`-mt-1 pb-3 text-xs text-muted ${moreOpen ? 'hidden' : ''}`}>
+          Salary, employment type, company, certifications, skills, source
+        </p>
+      </div>
+
+      {moreOpen ? (
+        <div id="more-filters" className="divide-y divide-line">
+          <Section title="Salary" defaultOpen={false} count={(filters.hasSalary ? 1 : 0) + (filters.salaryMin ? 1 : 0)}>
+            <OptionCheck name="hasSalary" checked={Boolean(filters.hasSalary)} onChange={(c) => onChange({ hasSalary: c || undefined, page: 1 })}>
+              Only jobs with a published salary
+            </OptionCheck>
+            <label className="mt-2 block px-1 text-xs text-muted">
+              Minimum annual salary (CAD)
+              <SalaryInput value={filters.salaryMin} onCommit={(v) => onChange({ salaryMin: v, page: 1 })} />
+            </label>
+          </Section>
+
           <Section
-            key={key}
-            title={title}
-            count={selectedHere.length}
-            defaultOpen={key === 'ON'}
-            empty={group.length === 0 && orphaned.length === 0}
+            title="Employment type"
+            count={filters.employment?.length}
+            defaultOpen={false}
+            empty={(facets?.employment ?? []).length === 0 && !(filters.employment?.length ?? 0)}
           >
-            <CheckList
-              name="cities"
-              facets={group}
-              selected={[...selectedHere, ...orphaned]}
-              onToggle={toggler('cities')}
-              limit={10}
+            <PillChecks
+              name="employment"
+              facets={facets?.employment ?? []}
+              selected={filters.employment ?? []}
+              onToggle={toggler('employment')}
+              labelFor={lookup(EMPLOYMENT_LABELS as Record<string, string>)}
             />
           </Section>
-        );
-      })}
 
-      <Section title="Employment type" count={filters.employment?.length} defaultOpen={false} empty={(facets?.employment ?? []).length === 0 && !(filters.employment?.length ?? 0)}>
-        <CheckList name="employment" facets={facets?.employment ?? []} selected={filters.employment ?? []} onToggle={toggler('employment')} limit={8} />
-      </Section>
+          <Section
+            title="Company"
+            count={filters.companies?.length}
+            defaultOpen={false}
+            empty={(facets?.companies ?? []).length === 0 && !(filters.companies?.length ?? 0)}
+          >
+            <CheckList
+              name="companies"
+              facets={facets?.companies ?? []}
+              selected={filters.companies ?? []}
+              onToggle={toggler('companies')}
+              searchLabel="Search companies"
+            />
+          </Section>
 
-      <Section title="Company" count={filters.companies?.length} defaultOpen={false} empty={(facets?.companies ?? []).length === 0 && !(filters.companies?.length ?? 0)}>
-        <CheckList name="companies" facets={facets?.companies ?? []} selected={filters.companies ?? []} onToggle={toggler('companies')} limit={10} />
-      </Section>
+          <Section
+            title="Certifications"
+            count={filters.certifications?.length}
+            defaultOpen={false}
+            empty={(facets?.certifications ?? []).length === 0 && !(filters.certifications?.length ?? 0)}
+          >
+            <CheckList
+              name="certifications"
+              facets={facets?.certifications ?? []}
+              selected={filters.certifications ?? []}
+              onToggle={toggler('certifications')}
+              searchLabel="Search certifications"
+              emptyLabel="No certifications listed in the current results"
+            />
+          </Section>
 
-      <Section title="Certifications" count={filters.certifications?.length} defaultOpen={false} empty={(facets?.certifications ?? []).length === 0 && !(filters.certifications?.length ?? 0)}>
-        <CheckList
-          name="certifications"
-          facets={facets?.certifications ?? []}
-          selected={filters.certifications ?? []}
-          onToggle={toggler('certifications')}
-          limit={10}
-          emptyLabel="No certifications extracted for the current results"
-        />
-      </Section>
+          <Section
+            title="Skills & tools"
+            count={filters.skills?.length}
+            defaultOpen={false}
+            empty={(facets?.skills ?? []).length === 0 && !(filters.skills?.length ?? 0)}
+          >
+            <CheckList
+              name="skills"
+              facets={facets?.skills ?? []}
+              selected={filters.skills ?? []}
+              onToggle={toggler('skills')}
+              searchLabel="Search skills and tools"
+            />
+          </Section>
 
-      <Section title="Skills & tools" count={filters.skills?.length} defaultOpen={false} empty={(facets?.skills ?? []).length === 0 && !(filters.skills?.length ?? 0)}>
-        <CheckList name="skills" facets={facets?.skills ?? []} selected={filters.skills ?? []} onToggle={toggler('skills')} limit={12} />
-      </Section>
+          <Section
+            title="Source"
+            count={filters.sources?.length}
+            defaultOpen={false}
+            empty={(facets?.sources ?? []).length === 0 && !(filters.sources?.length ?? 0)}
+          >
+            <CheckList name="sources" facets={facets?.sources ?? []} selected={filters.sources ?? []} onToggle={toggler('sources')} limit={8} />
+          </Section>
 
-      <Section title="Salary" defaultOpen={false}>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-line accent-[rgb(var(--accent))]"
-            name="hasSalary"
-            checked={Boolean(filters.hasSalary)}
-            onChange={(e) => onChange({ hasSalary: e.target.checked || undefined, page: 1 })}
-          />
-          Only jobs with a published salary
-        </label>
-        <label className="mt-2 block text-xs text-muted">
-          Minimum annual salary (CAD)
-          <SalaryInput value={filters.salaryMin} onCommit={(v) => onChange({ salaryMin: v, page: 1 })} />
-        </label>
-      </Section>
-
-      <Section title="Source" count={filters.sources?.length} defaultOpen={false} empty={(facets?.sources ?? []).length === 0 && !(filters.sources?.length ?? 0)}>
-        <CheckList name="sources" facets={facets?.sources ?? []} selected={filters.sources ?? []} onToggle={toggler('sources')} limit={12} />
-      </Section>
-
-      <Section title="Options" defaultOpen={false}>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-line accent-[rgb(var(--accent))]"
-            name="onlyPathway"
-            checked={Boolean(filters.onlyPathway)}
-            onChange={(e) => onChange({ onlyPathway: e.target.checked || undefined, page: 1 })}
-          />
-          Only &ldquo;pathway into cyber&rdquo; roles
-        </label>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-line accent-[rgb(var(--accent))]"
-            name="hidePathway"
-            checked={filters.includePathway === false}
-            onChange={(e) => onChange({ includePathway: e.target.checked ? false : undefined, page: 1 })}
-          />
-          Hide pathway / adjacent IT roles
-        </label>
-        <label className="flex cursor-pointer items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            className="h-4 w-4 rounded border-line accent-[rgb(var(--accent))]"
-            name="includeExpired"
-            checked={Boolean(filters.includeExpired)}
-            onChange={(e) => onChange({ includeExpired: e.target.checked || undefined, page: 1 })}
-          />
-          Include likely-expired postings
-        </label>
-      </Section>
+          <Section
+            title="Options"
+            defaultOpen={false}
+            count={(filters.onlyPathway ? 1 : 0) + (filters.includePathway === false ? 1 : 0) + (filters.includeExpired ? 1 : 0)}
+          >
+            <OptionCheck name="onlyPathway" checked={Boolean(filters.onlyPathway)} onChange={(c) => onChange({ onlyPathway: c || undefined, page: 1 })}>
+              Only roles that lead into security
+            </OptionCheck>
+            <OptionCheck
+              name="hidePathway"
+              checked={filters.includePathway === false}
+              onChange={(c) => onChange({ includePathway: c ? false : undefined, page: 1 })}
+            >
+              Hide IT roles that lead into security
+            </OptionCheck>
+            <OptionCheck name="includeExpired" checked={Boolean(filters.includeExpired)} onChange={(c) => onChange({ includeExpired: c || undefined, page: 1 })}>
+              Include postings that may have closed
+            </OptionCheck>
+          </Section>
+        </div>
+      ) : null}
       </div>
     </aside>
   );

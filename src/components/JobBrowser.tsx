@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { FilterPanel } from '@/components/FilterPanel';
+import { ActiveFilters } from '@/components/ActiveFilters';
 import { JobCard } from '@/components/JobCard';
 import { Pagination } from '@/components/Pagination';
 import { SearchBar } from '@/components/SearchBar';
@@ -10,7 +11,7 @@ import { DeepLinks, type DeepLinkItem } from '@/components/DeepLinks';
 import { rememberLastSearch, searchHistory } from '@/lib/client/storage';
 import { loadDataset } from '@/lib/client/dataset';
 import { buildDeepLinks } from '@/lib/deeplinks';
-import { filtersFromSearchParams, searchJobs, searchParamsFromFilters } from '@/lib/query';
+import { countActiveFilters, filtersFromSearchParams, searchJobs, searchParamsFromFilters } from '@/lib/query';
 import type { Job, JobFilters, JobSearchResult, SortKey } from '@/lib/types';
 
 type ApiResult = JobSearchResult & { deepLinks: DeepLinkItem[] };
@@ -47,9 +48,17 @@ export function JobBrowser() {
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => setHydrated(true), []);
 
+  // Once hydrated, the browser's own URL is the source of truth. On a static
+  // export, useSearchParams can report an empty query for a render or two
+  // after load, which briefly showed the whole board (and its count) before
+  // a shared filtered link applied. It still drives re-renders: every filter
+  // change and back/forward step updates it.
   const urlFilters = useMemo(
-    () => filtersFromSearchParams(new URLSearchParams(searchParams.toString())),
-    [searchParams],
+    () =>
+      filtersFromSearchParams(
+        new URLSearchParams(hydrated && typeof window !== 'undefined' ? window.location.search : searchParams.toString()),
+      ),
+    [searchParams, hydrated],
   );
   const filters = hydrated ? urlFilters : EMPTY_FILTERS;
 
@@ -215,16 +224,28 @@ export function JobBrowser() {
 
         <div ref={resultsRef} className="min-w-0 space-y-4">
           <div className="card flex min-h-[3.25rem] flex-wrap items-center gap-2 px-3 py-2.5">
-            <button type="button" className="btn lg:hidden" onClick={() => setShowFilters((s) => !s)}>
+            <button
+              type="button"
+              className="btn lg:hidden"
+              onClick={() => setShowFilters((s) => !s)}
+              aria-expanded={showFilters}
+              aria-label={showFilters ? 'Hide filters' : 'Filters'}
+            >
               {showFilters ? 'Hide filters' : 'Filters'}
+              {!showFilters && countActiveFilters(filters) > 0 ? (
+                <span className="rounded-full bg-brand/15 px-1.5 text-[11px] font-semibold tabular-nums text-brand">
+                  {countActiveFilters(filters)}
+                </span>
+              ) : null}
             </button>
 
             <span className="text-sm font-medium" data-testid="result-count" aria-live="polite">
-              {loading && !data ? (
+              {!data && !error ? (
                 <span className="text-muted">Loading…</span>
               ) : (
                 <>
-                  {(data?.total ?? 0).toLocaleString('en-CA')} <span className="font-normal text-muted">jobs</span>
+                  {(data?.total ?? 0).toLocaleString('en-CA')}{' '}
+                  <span className="font-normal text-muted">{data?.total === 1 ? 'job' : 'jobs'}</span>
                 </>
               )}
             </span>
@@ -271,6 +292,8 @@ export function JobBrowser() {
                 Infinite scroll
               </label>
             </div>
+
+            <ActiveFilters filters={filters} facets={data?.facets ?? null} onChange={update} onReset={reset} />
           </div>
 
           {error ? (
@@ -282,7 +305,10 @@ export function JobBrowser() {
             </div>
           ) : null}
 
-          {loading && !data ? (
+          {/* Skeleton until results exist, not merely until the data file has
+              loaded: in the frame between the two, the count read "0 jobs" and
+              the empty state flashed "No postings match these filters." */}
+          {!data && !error ? (
             <div className="space-y-3">
               {Array.from({ length: 6 }).map((_, i) => (
                 // eslint-disable-next-line react/no-array-index-key
@@ -291,7 +317,7 @@ export function JobBrowser() {
             </div>
           ) : null}
 
-          {!loading && jobs.length === 0 ? (
+          {data && jobs.length === 0 ? (
             <div className="card p-8 text-center">
               <p className="text-sm font-medium">No postings match these filters.</p>
               <p className="mt-1 text-sm text-muted">
