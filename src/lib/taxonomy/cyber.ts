@@ -453,9 +453,15 @@ export const PHYSICAL_SECURITY_EXCLUSIONS =
 export const PHYSICAL_SECURITY_EMPLOYER_RE =
   /\b(security services|security patrol|protection services|guard services|investigation services|s[ée]curit[ée] (priv[ée]e|incendie))\b/i;
 
-/** A technical qualifier that makes a title at such an employer an IT role. */
+/**
+ * A word that makes a title at such an employer an IT or cyber role: either a
+ * technical domain or a specialist security discipline. A guard company's
+ * titles are generic — manager, officer, supervisor, coordinator — while a
+ * cyber firm's name the discipline ("OT/ICS Security Specialist", "Privacy
+ * Analyst", "Threat Hunter").
+ */
 export const TECHNICAL_TITLE_QUALIFIER_RE =
-  /\b(cyber\w*|information|informatique|it|network|r[ée]seau|cloud|data|computer|systems?|soc|siem|application|software)\b/i;
+  /\b(cyber\w*|information|informatique|it|network|r[ée]seau|cloud|data|computer|systems?|soc|siem|application|software|ot|ics|scada|privacy|threat\w*|vulnerab\w*|penetration|pentest\w*|forensic\w*|incident|identity|iam|pam|grc|risk|compliance|architect\w*|engineer\w*|analyst|devsecops|appsec|cryptograph\w*|detection|malware)\b/i;
 
 /**
  * Consumer businesses — restaurants, franchises, retail, home care — that
