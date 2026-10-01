@@ -55,9 +55,18 @@ export function revalidate(jobs: Job[]): { jobs: Job[]; dropped: number } {
 
     // Relevance is re-judged as well, so a classifier fix reaches the postings
     // already published rather than only the next batch.
-    if (classify(job.titleRaw || job.title, job.description ?? '', '', job.company).rejected) {
+    const cls = classify(job.titleRaw || job.title, job.description ?? '', '', job.company);
+    if (cls.rejected) {
       dropped += 1;
       continue;
+    }
+    // Category rules change too. A carried "Cybersecurity Manager" kept the
+    // "Other" it was filed under before generic titles had a category. Only
+    // "Other" is re-filed: revalidation lacks the department text the first
+    // classification saw, so recategorising everything could flip categories
+    // back and forth between runs.
+    if (job.category === 'other' && cls.category !== 'other') {
+      job = { ...job, category: cls.category, secondaryCategories: cls.secondary };
     }
 
     // Strip a stored description that would not be accepted today, so records
