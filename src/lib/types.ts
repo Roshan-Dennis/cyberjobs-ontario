@@ -245,7 +245,7 @@ export interface JobFilters {
   pageSize?: number;
 }
 
-export type SortKey = 'relevance' | 'newest' | 'oldest' | 'salary' | 'company';
+export type SortKey = 'relevance' | 'newest' | 'oldest' | 'salary' | 'company' | 'match';
 
 export interface Facet {
   value: string;

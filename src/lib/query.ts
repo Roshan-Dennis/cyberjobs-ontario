@@ -167,8 +167,17 @@ function passesNonTextFilters(job: Job, f: JobFilters, now: number): boolean {
   return true;
 }
 
-function compare(sort: SortKey): (a: { job: Job; score: number }, b: { job: Job; score: number }) => number {
+function compare(
+  sort: SortKey,
+  matchScores?: Map<string, number>,
+): (a: { job: Job; score: number }, b: { job: Job; score: number }) => number {
+  // "Best match for my resume" needs a resume; without one it falls back to
+  // the default order rather than an arbitrary one.
+  if (sort === 'match' && !matchScores) sort = 'relevance';
   switch (sort) {
+    case 'match':
+      return (a, b) =>
+        (matchScores?.get(b.job.id) ?? 0) - (matchScores?.get(a.job.id) ?? 0) || b.score * 3 + b.job.rankScore - (a.score * 3 + a.job.rankScore);
     case 'newest':
       return (a, b) => (Date.parse(b.job.postedAt ?? '') || 0) - (Date.parse(a.job.postedAt ?? '') || 0);
     case 'oldest':
@@ -200,7 +209,11 @@ function facet(values: (string | null | undefined)[], labels?: Record<string, st
     .map(([value, count]) => ({ value, label: labels?.[value] ?? value, count }));
 }
 
-export function searchJobs(jobs: Job[], filters: JobFilters, meta: { lastIngestAt: string | null; notes?: string[]; degraded?: boolean }): JobSearchResult {
+export function searchJobs(
+  jobs: Job[],
+  filters: JobFilters,
+  meta: { lastIngestAt: string | null; notes?: string[]; degraded?: boolean; matchScores?: Map<string, number> },
+): JobSearchResult {
   const now = Date.now();
   const parsed = parseQuery(filters.q);
 
@@ -213,7 +226,7 @@ export function searchJobs(jobs: Job[], filters: JobFilters, meta: { lastIngestA
     matched.push({ job, score });
   }
 
-  matched.sort(compare(filters.sort ?? 'relevance'));
+  matched.sort(compare(filters.sort ?? 'relevance', meta.matchScores));
 
   const pageSize = Math.min(Math.max(filters.pageSize ?? 25, 1), 100);
   const totalPages = Math.max(1, Math.ceil(matched.length / pageSize));
