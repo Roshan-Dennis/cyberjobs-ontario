@@ -14,7 +14,7 @@ const PORT = Number(process.env.PORT ?? 4173);
 const TYPES = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css',
   '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.txt': 'text/plain',
-  '.xml': 'application/xml', '.ico': 'image/x-icon', '.woff2': 'font/woff2',
+  '.xml': 'application/xml', '.mjs': 'text/javascript', '.ico': 'image/x-icon', '.woff2': 'font/woff2',
 };
 
 async function resolve(urlPath) {
