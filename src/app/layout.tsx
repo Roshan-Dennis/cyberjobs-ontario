@@ -93,13 +93,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Link href="/" className="btn btn-ghost hidden sm:inline-flex">
                 Jobs
               </Link>
+              <Link href="/start" className="btn btn-ghost font-medium text-brand">
+                Start here
+              </Link>
               <Link href="/dashboard" className="btn btn-ghost">
                 Dashboard
               </Link>
               <Link href="/saved" className="btn btn-ghost">
                 Saved
               </Link>
-              <Link href="/about" className="btn btn-ghost">
+              {/* Kept off the phone header to leave room for "Start here"; the
+                  footer links to it on every page. */}
+              <Link href="/about" className="btn btn-ghost hidden sm:inline-flex">
                 Sources
               </Link>
               <ThemeToggle />
