@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { FilterPanel } from '@/components/FilterPanel';
 import { ActiveFilters } from '@/components/ActiveFilters';
+import { ResumeAdvisor } from '@/components/ResumeAdvisor';
+import { useResume } from '@/lib/client/resume-store';
+import { scoreResume } from '@/lib/ats/score';
 import { JobCard } from '@/components/JobCard';
 import { Pagination } from '@/components/Pagination';
 import { SearchBar } from '@/components/SearchBar';
@@ -29,6 +32,9 @@ const SORTS: { value: SortKey; label: string }[] = [
   { value: 'salary', label: 'Highest salary' },
   { value: 'company', label: 'Company A–Z' },
 ];
+
+/** Offered only while a resume is loaded. */
+const MATCH_SORT: { value: SortKey; label: string } = { value: 'match', label: 'Best match for my resume' };
 
 /** Stable empty object, so the pre-hydration render keeps a stable identity. */
 const EMPTY_FILTERS: JobFilters = {};
@@ -101,12 +107,21 @@ export function JobBrowser() {
     };
   }, []);
 
+  // With a resume loaded, every posting gets its match score, for the card
+  // badges and the "Best match for my resume" sort. Computed here in the
+  // browser from the in-memory resume; nothing is sent anywhere.
+  const resume = useResume();
+  const matchScores = useMemo(() => {
+    if (!resume || !dataset) return undefined;
+    return new Map(dataset.map((j) => [j.id, scoreResume(resume.profile, j).score]));
+  }, [resume, dataset]);
+
   useEffect(() => {
     if (!dataset) return;
-    const result = searchJobs(dataset, filters, { lastIngestAt: generatedAt, notes: [], degraded: false });
+    const result = searchJobs(dataset, filters, { lastIngestAt: generatedAt, notes: [], degraded: false, matchScores });
     setData({ ...result, deepLinks: buildDeepLinks(filters, provinceForCity(dataset, filters.cities)) });
     setVisiblePages(1);
-  }, [dataset, filters, generatedAt]);
+  }, [dataset, filters, generatedAt, matchScores]);
 
   // Remember where the reader was, so "Back to search" on a job page returns
   // to these results instead of an unfiltered board.
@@ -209,6 +224,8 @@ export function JobBrowser() {
         </div>
       </section>
 
+      <ResumeAdvisor dataset={dataset} onApply={update} />
+
       {/* items-start keeps both columns anchored to the same top edge, so the
           filter card and the results toolbar line up across the gutter. */}
       <div className="grid items-start gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -255,10 +272,10 @@ export function JobBrowser() {
                 Sort
                 <select
                   className="input w-auto py-1.5 text-sm"
-                  value={filters.sort ?? 'relevance'}
+                  value={filters.sort === 'match' && !matchScores ? 'relevance' : (filters.sort ?? 'relevance')}
                   onChange={(e) => update({ sort: e.target.value as SortKey, page: 1 })}
                 >
-                  {SORTS.map((s) => (
+                  {(matchScores ? [MATCH_SORT, ...SORTS] : SORTS).map((s) => (
                     <option key={s.value} value={s.value}>
                       {s.label}
                     </option>
@@ -334,6 +351,7 @@ export function JobBrowser() {
               <JobCard
                 key={job.id}
                 job={job}
+                matchScore={matchScores?.get(job.id)}
                 onTagClick={(kind, value) =>
                   // Certifications live in their own list on each posting, so
                   // a CISSP tag filtered as a skill used to match nothing.

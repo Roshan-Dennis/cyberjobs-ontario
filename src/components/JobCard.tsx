@@ -16,11 +16,21 @@ import {
   RepostBadge,
 } from '@/components/Badges';
 import type { Job } from '@/lib/types';
+import { MatchPill } from '@/components/ResumeAdvisor';
 
 /** A tag on the card is either a certification or a tool; each filters its own group. */
 export type TagKind = 'cert' | 'skill';
 
-export function JobCard({ job, onTagClick }: { job: Job; onTagClick?: (kind: TagKind, value: string) => void }) {
+export function JobCard({
+  job,
+  onTagClick,
+  matchScore,
+}: {
+  job: Job;
+  onTagClick?: (kind: TagKind, value: string) => void;
+  /** Resume match for this posting, when the reader has loaded a resume. */
+  matchScore?: number;
+}) {
   const salary = formatSalary(job.salary);
   const location = [job.city, job.region].filter(Boolean).join(' · ') || job.locationRaw;
   const tech = job.requirements.technologies.slice(0, 6);
@@ -48,6 +58,7 @@ export function JobCard({ job, onTagClick }: { job: Job; onTagClick?: (kind: Tag
             </div>
 
             <div className="flex shrink-0 flex-wrap items-baseline gap-x-2 sm:flex-col sm:items-end sm:gap-1.5 sm:text-right">
+              {matchScore != null ? <MatchPill score={matchScore} /> : null}
               <span className="text-xs text-muted">{relativeTime(job.postedAt)}</span>
               {salary ? <span className="text-sm font-semibold text-good">{salary}</span> : null}
             </div>
