@@ -18,15 +18,19 @@
     "sources": "tsx scripts/list-sources.ts",
     "selftest": "tsx scripts/selftest.ts",
     "data": "tsx scripts/build-data.ts",
-    "build:static": "STATIC_EXPORT=1 next build",
+    "build:static": "node scripts/copy-pdf-worker.mjs && STATIC_EXPORT=1 next build",
     "publish": "npm run data && npm run build:static",
     "fixture": "tsx scripts/fixture-data.ts",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "predev": "node scripts/copy-pdf-worker.mjs",
+    "prebuild": "node scripts/copy-pdf-worker.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
     "cheerio": "^1.0.0",
+    "mammoth": "1.13.0",
     "next": "15.5.23",
+    "pdfjs-dist": "4.10.38",
     "react": "19.0.0",
     "react-dom": "19.0.0"
   },

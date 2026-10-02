@@ -24,3 +24,6 @@ out/
 # Playwright
 test-results/
 playwright-report/
+
+# Copied from pdfjs-dist at build time (scripts/copy-pdf-worker.mjs)
+public/pdf.worker.min.js
