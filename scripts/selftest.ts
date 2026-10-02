@@ -10,6 +10,10 @@
  */
 import { normalizeJob, isMeaningfulDescription, DEFAULT_NORMALIZE_OPTIONS } from '../src/lib/normalize';
 import { dedupeJobs, companyKey } from '../src/lib/normalize/dedupe';
+import { parseResume, coveredMonths } from '../src/lib/ats/resume';
+import { scoreResume, keywordSets, titleTokens } from '../src/lib/ats/score';
+import { suggest, formatChecks, gainFor, pastTense } from '../src/lib/ats/suggest';
+import { advise, levelsForYears } from '../src/lib/ats/advisor';
 import { searchJobs, filtersFromSearchParams, searchParamsFromFilters, countActiveFilters } from '../src/lib/query';
 import { parseSalary } from '../src/lib/normalize/salary';
 import { matchLocation } from '../src/lib/taxonomy/canada';
@@ -935,6 +939,134 @@ check('Comma-space thousands separator parsed', spaced.min === 170000 && spaced.
   const [s1, s2] = revalidate([stuck, settled]).jobs;
   check('Carried "Other" re-filed under its category', s1?.category === 'security_leadership', s1?.category);
   check('Carried real category left alone', s2?.category === 'grc', s2?.category);
+}
+
+
+/* ------------------------------------------------------------------ */
+section('ATS checker: resume parsing');
+
+const ATS_NOW = new Date(Date.UTC(2026, 9, 1));
+const RESUME = `Jordan Lee
+jordan.lee@example.com | (519) 555-0142 | Waterloo, ON
+
+SUMMARY
+SOC analyst with hands-on incident response and cloud security lab work.
+
+EXPERIENCE
+Security Operations Analyst — Acme Corp
+Jan 2022 – Dec 2023
+• Responsible for monitoring alerts in Azure Sentinel and Splunk across 400 endpoints
+• Helped with incident response for phishing cases
+• Worked on Python scripts for log enrichment
+
+IT Support Specialist — Beta Inc
+Mar 2024 – Present
+• Resolved tickets for a 200-person office
+• Involved in firewall rule reviews
+
+EDUCATION
+Bachelor of Science, Computer Science — 2021
+
+CERTIFICATIONS
+CompTIA Security+
+
+SKILLS
+Splunk, Azure Sentinel, Python, Incident Response, Linux`;
+
+const prof = parseResume(RESUME, ATS_NOW);
+check('Resume: Splunk recognised', prof.terms.has('splunk'));
+check('Resume: alias recorded as written', prof.terms.get('microsoft sentinel')?.found === 'Azure Sentinel', prof.terms.get('microsoft sentinel'));
+check('Resume: certification recognised', prof.certifications.some((c) => c.canonical === 'CompTIA Security+'));
+check("Resume: bachelor's degree recognised", prof.educationRank === 3, prof.education);
+// Jan 2022–Dec 2023 = 24 months; Mar 2024–Oct 2026 (present, capped at "now") = 32 months; 56 months = 4.7 years.
+check('Resume: years from dated roles', prof.years === 4.7, [prof.years, prof.periods.map((p) => p.text)]);
+check('Resume: education dates not counted as work', prof.periods.length === 2, prof.periods.map((p) => p.text));
+check('Resume: contact details found', prof.hasEmail && prof.hasPhone);
+check('Resume: standard sections found', prof.sections.experience && prof.sections.education && prof.sections.skills, prof.sections);
+check('Resume: overlapping roles counted once', coveredMonths([
+  { text: 'a', start: new Date(Date.UTC(2020, 0, 1)), end: new Date(Date.UTC(2020, 11, 1)) },
+  { text: 'b', start: new Date(Date.UTC(2020, 5, 1)), end: new Date(Date.UTC(2021, 5, 1)) },
+]) === 18);
+
+section('ATS checker: scoring (hand-calculated)');
+
+const SOC_JOB = {
+  title: 'SOC Analyst',
+  requirements: {
+    requiredSkills: ['Splunk', 'Incident Response', 'Python', 'AWS'],
+    preferredSkills: [],
+    technologies: ['Splunk', 'CrowdStrike Falcon'],
+    certifications: ['CompTIA Security+'],
+    education: ["Bachelor's degree"],
+    yearsExperience: '2+ years',
+    yearsExperienceMin: 2,
+  },
+};
+// Applicable weights: required 40, tools 15, certs 10, experience 10, education 10, title 5 = 90
+// (no preferred list). Re-weighted to 100: required 44.44 x 3/4 = 33.33; tools 16.67 x 0/1 = 0;
+// certs 11.11 x 1 = 11.11; experience 11.11 x 1 = 11.11; education 11.11; title 5.56 x 2/2 = 5.56.
+// Total 72.22 -> 72.
+const sc = scoreResume(prof, SOC_JOB);
+check('Score matches the hand calculation (72)', sc.score === 72, sc.components.map((c) => `${c.key}:${c.points}/${c.maxPoints}`));
+check('Score is deterministic', scoreResume(prof, SOC_JOB).score === sc.score && scoreResume(parseResume(RESUME, ATS_NOW), SOC_JOB).score === 72);
+check('Tools exclude keywords already counted as required', JSON.stringify(keywordSets(SOC_JOB).tools) === '["CrowdStrike Falcon"]');
+check('Missing required keyword reported', JSON.stringify(sc.components.find((c) => c.key === 'required')?.missing) === '["AWS"]');
+check('Component maxima sum to 100', Math.round(sc.components.reduce((a, c) => a + c.maxPoints, 0)) === 100);
+// Adding AWS lifts required to 4/4: 44.44 + 11.11 + 11.11 + 11.11 + 5.56 = 83.33 -> 83, a gain of 11.
+check('Gain for a missing keyword is exact (+11)', gainFor(prof, SOC_JOB, sc, 'AWS') === 11, gainFor(prof, SOC_JOB, sc, 'AWS'));
+check('Empty resume scores 0', scoreResume(parseResume('', ATS_NOW), SOC_JOB).score === 0);
+check('Title tokens stop at the employer/programme suffix', JSON.stringify(titleTokens('SOC Analyst (Tier 2) — Arctic Wolf Networks Talent Program')) === '["soc","analyst"]', titleTokens('SOC Analyst (Tier 2) — Arctic Wolf Networks Talent Program'));
+check('Title tokens keep a comma-separated speciality', titleTokens('Senior Detection Engineer, Threat Research').includes('threat'));
+check('Title tokens drop seniority words', JSON.stringify(titleTokens('Senior Product Security Lead (Remote)')) === '["product","security"]');
+{
+  const fewer = { ...SOC_JOB, requirements: { ...SOC_JOB.requirements, yearsExperienceMin: 8 } };
+  const s8 = scoreResume(prof, fewer);
+  // Experience 11.11 x 4.7/8 = 6.53 instead of 11.11: 72.22 - 4.58 = 67.64 -> 68.
+  check('Experience below the minimum scores proportionally (68)', s8.score === 68, s8.score);
+}
+{
+  const anyCert = { ...SOC_JOB, requirements: { ...SOC_JOB.requirements, certifications: ['CISSP', 'CISM', 'CompTIA Security+'] } };
+  const c = scoreResume(prof, anyCert).components.find((x) => x.key === 'certifications');
+  check('One of three alternative certifications earns half', c?.points === Math.round((c?.maxPoints ?? 0) * 5) / 10, c);
+}
+
+section('ATS checker: suggestions');
+
+const sugg = suggest(prof, SOC_JOB, sc);
+check('Missing keywords suggestion lists AWS with its gain', sugg.find((x) => x.id === 'missing-required')?.keywords?.[0]?.keyword === 'AWS' && sugg.find((x) => x.id === 'missing-required')?.keywords?.[0]?.gain === 11);
+check('Wording suggestion: Azure Sentinel -> Microsoft Sentinel only when the posting asks for it', !sugg.some((x) => x.id === 'wording'));
+{
+  const sentinelJob = { ...SOC_JOB, requirements: { ...SOC_JOB.requirements, technologies: ['Microsoft Sentinel'] } };
+  const w = suggest(prof, sentinelJob, scoreResume(prof, sentinelJob)).find((x) => x.id === 'wording');
+  check('Wording suggestion uses the posting term', w?.rewrites?.[0]?.after === 'Microsoft Sentinel (Azure Sentinel)', w?.rewrites);
+}
+const responsible = sugg.find((x) => x.title.startsWith('“Responsible for'));
+check('"Responsible for monitoring" rewritten without changing facts', responsible?.rewrites?.[0]?.after === 'Monitored alerts in Azure Sentinel and Splunk across 400 endpoints', responsible?.rewrites);
+check('"Helped with" rewritten as "Supported"', sugg.find((x) => x.title.startsWith('“Helped'))?.rewrites?.[0]?.after === 'Supported incident response for phishing cases');
+check('"Worked on" flagged with the real line', sugg.find((x) => x.title.startsWith('“Worked on'))?.examples?.[0] === 'Worked on Python scripts for log enrichment');
+check('Past tense: regular, silent-e, doubled, -ied, irregular',
+  pastTense('monitoring') === 'monitored' && pastTense('managing') === 'managed' && pastTense('planning') === 'planned' &&
+  pastTense('identifying') === 'identified' && pastTense('building') === 'built' && pastTense('troubleshooting') === 'troubleshot');
+check('Format checks pass for a well-formed resume', formatChecks(prof).filter((c) => c.label !== 'Length').every((c) => c.ok), formatChecks(prof).filter((c) => !c.ok));
+check('Length check flags a very short resume', formatChecks(prof).find((c) => c.label === 'Length')?.ok === false);
+check('Format check flags an unreadable (scanned) resume', !formatChecks(parseResume('scan', ATS_NOW))[0].ok);
+
+section('ATS checker: advisor');
+
+check('Under a year targets internship and co-op', levelsForYears(0.5).levels.includes('internship') && levelsForYears(0.5).levels.includes('coop'));
+check('No dates falls back to entry-level', levelsForYears(null).levels.includes('entry'));
+{
+  const pool = ['SOC Analyst', 'Cloud Security Engineer', 'Help Desk Technician'].map((t, i) =>
+    normalizeJob(raw({ sourceJobId: `adv-${i}`, title: t, description: 'Requirements: Splunk, incident response, Python, AWS, firewall, SIEM. 2+ years of experience.' })).job!,
+  ).filter(Boolean);
+  const adv = advise(prof, pool);
+  check('Advisor ranks every live posting', adv.matches.length === pool.length);
+  check('Advisor matches are sorted by score', adv.matches.every((m, i, a) => i === 0 || a[i - 1].result.score >= m.result.score));
+  check('Advisor gives guidance', adv.guidance.length >= 2);
+  const coop = normalizeJob(raw({ sourceJobId: 'adv-coop', title: 'Cybersecurity Co-op Student', description: 'Requirements: Splunk, incident response, Python, AWS, SIEM.' })).job!;
+  const adv2 = advise(prof, [...pool, coop]);
+  check('Advisor keeps student postings out of an experienced resume\'s top matches', !adv2.matches.some((m) => m.job.id === coop.id), adv2.matches.map((m) => m.job.title));
+  check('Checker flags a student posting for an experienced resume', suggest(prof, coop, scoreResume(prof, coop)).some((x) => x.id === 'student-posting'));
 }
 
 /* ------------------------------------------------------------------ */
