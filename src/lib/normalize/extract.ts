@@ -2,7 +2,7 @@ import { CERTIFICATIONS, SKILLS, TECHNOLOGIES, type Term } from '@/lib/taxonomy/
 import { extractYearsExperience, extractYearsExperienceLabel } from '@/lib/taxonomy/titles';
 import type { JobRequirements } from '@/lib/types';
 
-interface CompiledTerm {
+export interface CompiledTerm {
   canonical: string;
   re: RegExp;
 }
@@ -11,7 +11,7 @@ function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function compile(terms: Term[]): CompiledTerm[] {
+export function compile(terms: Term[]): CompiledTerm[] {
   return terms.map((term) => {
     const forms = [term.canonical, ...term.aliases].map(escapeRe);
     // Allow flexible whitespace/hyphenation between words.
@@ -23,9 +23,9 @@ function compile(terms: Term[]): CompiledTerm[] {
   });
 }
 
-const COMPILED_CERTS = compile(CERTIFICATIONS);
-const COMPILED_TECH = compile(TECHNOLOGIES);
-const COMPILED_SKILLS = compile(SKILLS);
+export const COMPILED_CERTS = compile(CERTIFICATIONS);
+export const COMPILED_TECH = compile(TECHNOLOGIES);
+export const COMPILED_SKILLS = compile(SKILLS);
 
 function findAll(text: string, compiled: CompiledTerm[], limit = 40): string[] {
   const found: string[] = [];
@@ -64,7 +64,7 @@ function sliceSection(text: string, start: RegExp): string | null {
   return rest.slice(0, end);
 }
 
-const EDUCATION_RULES: { label: string; re: RegExp }[] = [
+export const EDUCATION_RULES: { label: string; re: RegExp }[] = [
   { label: "Bachelor's degree", re: /\b(bachelor'?s?|b\.?sc\.?|b\.?a\.?\b|undergraduate degree|baccalaur[ée]at)\b/i },
   { label: "Master's degree", re: /\b(master'?s?|m\.?sc\.?|mba|m\.?eng\.?|maîtrise)\b/i },
   { label: 'PhD', re: /\b(ph\.?d\.?|doctorate|doctoral)\b/i },
