@@ -14,6 +14,10 @@ import { parseResume, coveredMonths } from '../src/lib/ats/resume';
 import { scoreResume, keywordSets, titleTokens } from '../src/lib/ats/score';
 import { suggest, formatChecks, gainFor, pastTense } from '../src/lib/ats/suggest';
 import { advise, levelsForYears } from '../src/lib/ats/advisor';
+import { CAREERS, CAREER_BY_SLUG, CAREER_MAP } from '../src/lib/careers/catalog';
+import { careerStats, jobsFor, boardLink } from '../src/lib/careers/stats';
+import { QUIZ, scoreQuiz } from '../src/lib/careers/quiz';
+import { GLOSSARY } from '../src/lib/careers/glossary';
 import { searchJobs, filtersFromSearchParams, searchParamsFromFilters, countActiveFilters } from '../src/lib/query';
 import { parseSalary } from '../src/lib/normalize/salary';
 import { matchLocation } from '../src/lib/taxonomy/canada';
@@ -1068,6 +1072,76 @@ check('No dates falls back to entry-level', levelsForYears(null).levels.includes
   check('Advisor keeps student postings out of an experienced resume\'s top matches', !adv2.matches.some((m) => m.job.id === coop.id), adv2.matches.map((m) => m.job.title));
   check('Checker flags a student posting for an experienced resume', suggest(prof, coop, scoreResume(prof, coop)).some((x) => x.id === 'student-posting'));
 }
+
+
+/* ------------------------------------------------------------------ */
+section('Start here: career catalogue, quiz and live stats');
+
+check('Every career has a unique slug', new Set(CAREERS.map((c) => c.slug)).size === CAREERS.length);
+check('Every career links only to careers that exist', CAREERS.every((c) => c.next.every((n) => CAREER_BY_SLUG.has(n))), CAREERS.flatMap((c) => c.next.filter((n) => !CAREER_BY_SLUG.has(n))));
+check('Career map names only real careers, each once', (() => {
+  const all = CAREER_MAP.flatMap((s) => s.slugs);
+  return all.every((s) => CAREER_BY_SLUG.has(s)) && new Set(all).size === all.length && all.length === CAREERS.length;
+})());
+check('No board category belongs to two careers', (() => {
+  const cats = CAREERS.flatMap((c) => c.categories);
+  return new Set(cats).size === cats.length;
+})());
+check('Every learning resource is an https link', CAREERS.every((c) => c.learn.every((r) => /^https:\/\//.test(r.url))));
+check('Quiz options only point at real careers', QUIZ.every((q) => q.options.every((o) => Object.keys(o.points).every((k) => CAREER_BY_SLUG.has(k)))));
+
+// Every possible combination of answers produces three suggestions.
+{
+  let combos = 0;
+  let bad = 0;
+  const walk = (i: number, answers: Record<string, string>) => {
+    if (i === QUIZ.length) {
+      combos += 1;
+      if (scoreQuiz(answers).length !== 3) bad += 1;
+      return;
+    }
+    for (const o of QUIZ[i].options) walk(i + 1, { ...answers, [QUIZ[i].id]: o.id });
+  };
+  walk(0, {});
+  check(`All ${combos} answer combinations give three suggestions`, bad === 0, bad);
+}
+// Hand-checked: investigate + new to tech + fast pace + some people + light scripting.
+// soc-analyst 3+2+2+1+1 = 9; incident-response 3+0+2+0+1 = 6; it-support 0+2+1+0+0 = 3 (ties with
+// vulnerability-management 0+0+0+2+1 = 3, broken by catalogue order: IT support comes first).
+{
+  const r = scoreQuiz({ enjoy: 'investigate', background: 'none', pace: 'fast', people: 'some', code: 'ok' });
+  check('Quiz result matches the hand calculation', JSON.stringify(r.map((x) => [x.slug, x.points])) === '[["soc-analyst",9],["incident-response",6],["it-support",3]]', r.map((x) => [x.slug, x.points]));
+  check('Quiz explains each suggestion', r[0].reasons.includes('you enjoy investigating') && r[0].reasons.includes('you like a fast pace'));
+}
+{
+  const r = scoreQuiz({ enjoy: 'organise', background: 'business', pace: 'projects', people: 'lots', code: 'avoid' });
+  check('A business background that avoids code is pointed to GRC first', r[0].slug === 'grc-analyst', r);
+}
+
+// Live stats against a small hand-built board.
+{
+  const soc = CAREER_BY_SLUG.get('soc-analyst')!;
+  const mkJob = (id: string, over: Partial<import('../src/lib/types').Job>) => ({ ...mk(id), ...over });
+  const pay = (lo: number, hi: number) => ({ ...mk('p').salary, annualMin: lo, annualMax: hi });
+  const board = [
+    mkJob('s1', { category: 'soc_analysis', experienceLevel: 'junior', workArrangement: 'remote', salary: pay(60000, 80000), company: 'Acme' }),
+    mkJob('s2', { category: 'soc_analysis', experienceLevel: 'mid', workArrangement: 'onsite', salary: pay(80000, 100000), company: 'Acme' }),
+    mkJob('s3', { category: 'soc_analysis', experienceLevel: 'entry', workArrangement: 'hybrid', salary: pay(50000, 50000), company: 'Beta' }),
+    mkJob('s4', { category: 'soc_analysis', experienceLevel: 'senior', isExpired: true }),
+    mkJob('g1', { category: 'grc', experienceLevel: 'junior' }),
+  ];
+  const st = careerStats(soc, board);
+  check('Stats count only live postings in the path', st.open === 3 && jobsFor(soc, board).length === 3, st.open);
+  check('Stats count entry-level and remote postings', st.entryLevel === 2 && st.remote === 1, [st.entryLevel, st.remote]);
+  // Midpoints 70k, 90k, 50k -> sorted 50k, 70k, 90k: median 70k, range 50k-90k.
+  check('Pay median and range from midpoints', st.pay?.median === 70000 && st.pay?.low === 50000 && st.pay?.high === 90000 && st.pay?.sample === 3, st.pay);
+  check('Pay withheld below three postings', careerStats(soc, board.slice(0, 2)).pay === null);
+  check('Top employer counted', st.topEmployers[0]?.name === 'Acme' && st.topEmployers[0]?.count === 2, st.topEmployers);
+  // The career page's link must show exactly the postings the stats counted.
+  const linked = searchJobs(board, filtersFromSearchParams(new URLSearchParams(boardLink(soc).slice(2))), { lastIngestAt: null });
+  check('Board link shows exactly the counted postings', linked.total === st.open, [linked.total, st.open]);
+}
+check('Glossary terms are unique', new Set(GLOSSARY.map((g) => g.term.toLowerCase())).size === GLOSSARY.length);
 
 /* ------------------------------------------------------------------ */
 console.log(`\n${'='.repeat(70)}`);
