@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import type { Job, JobFilters } from '@/lib/types';
 import { advise } from '@/lib/ats/advisor';
@@ -32,11 +32,18 @@ export function MatchPill({ score, className = '' }: { score: number; className?
 export function ResumeAdvisor({ dataset, onApply }: { dataset: Job[] | null; onApply: (patch: Partial<JobFilters>) => void }) {
   const resume = useResume();
   const [open, setOpen] = useState(false);
+  // "/#match" (linked from the Start here guide) opens the advisor directly.
+  useEffect(() => {
+    if (window.location.hash === '#match') {
+      setOpen(true);
+      document.getElementById('match')?.scrollIntoView({ block: 'start' });
+    }
+  }, []);
   const advice = useMemo(() => (resume && dataset ? advise(resume.profile, dataset) : null), [resume, dataset]);
   const expanded = open || Boolean(resume);
 
   return (
-    <section className="card p-4" aria-labelledby="advisor-heading">
+    <section id="match" className="card scroll-mt-20 p-4" aria-labelledby="advisor-heading">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h2 id="advisor-heading" className="text-base font-semibold">

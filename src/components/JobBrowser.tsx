@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { FilterPanel } from '@/components/FilterPanel';
@@ -206,6 +207,11 @@ export function JobBrowser() {
         <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted/80">
           Postings collected hourly from company career-site APIs, the federal Job Bank and licensed job APIs —
           deduplicated, categorised and ranked.
+        </p>
+        <p className="mt-2 text-sm">
+          <Link href="/start" className="font-medium text-brand hover:underline">
+            New to cybersecurity? Start here →
+          </Link>
         </p>
         <div className="mt-3">
           <SearchBar
