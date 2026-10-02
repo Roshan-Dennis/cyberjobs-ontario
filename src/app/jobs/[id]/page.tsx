@@ -5,6 +5,7 @@ import { relativeTime } from '@/lib/normalize/dates';
 import { formatSalary } from '@/lib/normalize/salary';
 import { CATEGORY_LABELS, EMPLOYMENT_LABELS, EXPERIENCE_LABELS } from '@/lib/types';
 import { SaveButton } from '@/components/SaveButton';
+import { AtsChecker } from '@/components/AtsChecker';
 import { MarkViewed } from '@/components/MarkViewed';
 import { BackToSearch } from '@/components/BackToSearch';
 
@@ -123,7 +124,7 @@ export default async function JobPage({ params }: Props) {
         </p>
       </article>
 
-      <aside className="space-y-4 lg:sticky lg:top-20 lg:self-start">
+      <aside className="space-y-4 lg:self-start">
         <div className="card p-4">
           <a
             href={job.applyUrl}
@@ -165,6 +166,10 @@ export default async function JobPage({ params }: Props) {
             </div>
           ) : null}
         </div>
+
+        {/* Only the title and requirements reach the browser for this, not the
+            whole posting: that is all the checker scores against. */}
+        <AtsChecker title={job.title} requirements={job.requirements} />
 
         <div className="card space-y-3 p-4">
           <h2 className="text-sm font-semibold">At a glance</h2>
