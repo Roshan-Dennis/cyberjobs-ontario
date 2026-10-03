@@ -29,6 +29,17 @@ export const GREENHOUSE_BOARDS: BoardEntry[] = [
   { token: 'later', label: 'Later', hint: 'Vancouver' },
   { token: 'unbounce', label: 'Unbounce', hint: 'Vancouver' },
 
+  // Added after the October 2026 audit: each answered and had live Canadian
+  // postings, most with security or IT roles among them.
+  { token: 'beyondtrust', label: 'BeyondTrust' },
+  { token: 'geotab', label: 'Geotab', hint: 'Oakville' },
+  { token: 'knowbe4', label: 'KnowBe4' },
+  { token: 'onetrust', label: 'OneTrust' },
+  { token: 'tanium', label: 'Tanium' },
+  { token: 'lastpass', label: 'LastPass' },
+  { token: 'pagerduty', label: 'PagerDuty', hint: 'Toronto' },
+  { token: 'lyft', label: 'Lyft', hint: 'Toronto' },
+
   // Canadian / strong Ontario presence
   { token: 'hootsuite', label: 'Hootsuite' },
   { token: 'faire', label: 'Faire', hint: 'Toronto/Kitchener' },
@@ -77,8 +88,6 @@ export const GREENHOUSE_BOARDS: BoardEntry[] = [
   { token: 'asana', label: 'Asana' },
   { token: 'grafanalabs', label: 'Grafana Labs' },
   { token: 'vercel', label: 'Vercel' },
-  { token: 'clickhouse', label: 'ClickHouse' },
-  { token: 'temporaltechnologies', label: 'Temporal' },
   { token: 'brex', label: 'Brex' },
   { token: 'nuro', label: 'Nuro' },
   { token: 'scaleai', label: 'Scale AI' },
@@ -114,6 +123,8 @@ export const LEVER_BOARDS: BoardEntry[] = [
   { token: 'sonarsource', label: 'Sonar' },
   { token: 'jumpcloud', label: 'JumpCloud' },
   { token: 'secureframe', label: 'Secureframe' },
+  // Added after the October 2026 audit.
+  { token: 'wattpad', label: 'Wattpad', hint: 'Toronto' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -155,6 +166,17 @@ export const ASHBY_BOARDS: BoardEntry[] = [
   { token: 'drata', label: 'Drata' },
   { token: 'plaid', label: 'Plaid' },
   { token: 'lightspeedhq', label: 'Lightspeed Commerce' },
+  // Added after the October 2026 audit (live, with Canadian postings).
+  { token: 'workos', label: 'WorkOS' },
+  { token: 'sentry', label: 'Sentry', hint: 'Toronto' },
+  { token: 'snyk', label: 'Snyk' },
+  { token: 'socure', label: 'Socure' },
+  { token: 'zip', label: 'Zip' },
+  { token: 'perplexity', label: 'Perplexity' },
+  { token: 'snowflake', label: 'Snowflake', hint: 'Toronto' },
+  { token: 'float', label: 'Float', hint: 'Toronto' },
+  { token: 'top-hat', label: 'Top Hat', hint: 'Toronto' },
+  { token: 'thinkific', label: 'Thinkific', hint: 'Vancouver' },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -176,21 +198,21 @@ export const WORKABLE_BOARDS: BoardEntry[] = [
 /* ------------------------------------------------------------------ */
 /* Recruitee: https://{token}.recruitee.com/api/offers/                */
 /* ------------------------------------------------------------------ */
-export const RECRUITEE_BOARDS: BoardEntry[] = [
-  { token: 'eyeo', label: 'eyeo' },
-  { token: 'usercentrics', label: 'Usercentrics' },
-  { token: 'hive', label: 'Hive' },
-];
+// All three previous boards (eyeo, Usercentrics, Hive) answered 404 in the
+// October 2026 audit and were removed. Add verified boards here as found.
+export const RECRUITEE_BOARDS: BoardEntry[] = [];
 
 /* ------------------------------------------------------------------ */
 /* SmartRecruiters (opt-in): api.smartrecruiters.com/v1/companies/{id} */
 /* ------------------------------------------------------------------ */
+// The source stays off by default (its robots.txt disallows crawling). The
+// previous accounts returned no Canadian postings at all; these three were
+// verified in the October 2026 audit to list them, so the source works if it
+// is ever deliberately enabled.
 export const SMARTRECRUITERS_BOARDS: BoardEntry[] = [
-  { token: 'Telus', label: 'TELUS' },
-  { token: 'Bosch', label: 'Bosch' },
-  { token: 'Visa', label: 'Visa' },
-  { token: 'Ubisoft', label: 'Ubisoft' },
-  { token: 'McDonalds', label: "McDonald's" },
+  { token: 'Ubisoft2', label: 'Ubisoft', hint: 'Montreal/Toronto' },
+  { token: 'Videotron', label: 'Vidéotron', hint: 'Montreal' },
+  { token: 'ServiceNow', label: 'ServiceNow' },
 ];
 
 /* ------------------------------------------------------------------ */
