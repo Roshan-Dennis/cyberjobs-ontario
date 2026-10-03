@@ -1,14 +1,19 @@
 /**
- * Turn a free-text location string into a place, a province and a verdict on
+ * Turn a free-text location string into a place, a region and a verdict on
  * whether the posting is in scope.
  *
- * Scope is Ontario, Alberta, British Columbia and Quebec, plus roles that are
- * genuinely remote-anywhere-in-Canada. The four provincial gazetteers are data
- * only (`ontario.ts`, `provinces.ts`); everything that decides *what a string
- * means* lives here, so there is exactly one place to fix when it gets it wrong.
+ * Scope is Canada (Ontario, Alberta, British Columbia, Quebec — plus a named
+ * province elsewhere, or genuinely remote-anywhere-in-Canada) and the United
+ * States (any of the 50 states + DC, or genuinely remote-anywhere-in-the-US).
+ * The gazetteers are data only (`ontario.ts`, `provinces.ts`, `states.ts`);
+ * everything that decides *what a string means* lives here, so there is
+ * exactly one place to fix when it gets it wrong.
  *
  * It has got it wrong before, expensively, which is why the guards below are
- * as blunt as they are. See `FOREIGN_MARKERS` and `AMBIGUOUS_CITIES`.
+ * as blunt as they are. See `FOREIGN_MARKERS` and `AMBIGUOUS_CITIES`. Adding
+ * the US did not relax that: a bare "Cambridge" is still ambiguous (Ontario?
+ * Massachusetts? England?) and still needs a country or state marker to
+ * resolve, the same discipline that governs the Canadian places.
  */
 
 import { ONTARIO_PLACES } from '@/lib/taxonomy/ontario';
@@ -19,10 +24,18 @@ import {
   QUEBEC_PLACES,
   type ProvinceCode,
 } from '@/lib/taxonomy/provinces';
+import { US_PLACES, US_STATE_CODES, US_STATE_NAMES, type USStateCode } from '@/lib/taxonomy/states';
 import type { OntarioPlace } from '@/lib/taxonomy/ontario';
 
 export { PROVINCE_CODES, PROVINCE_NAMES } from '@/lib/taxonomy/provinces';
 export type { ProvinceCode } from '@/lib/taxonomy/provinces';
+export { US_STATE_CODES, US_STATE_NAMES } from '@/lib/taxonomy/states';
+export type { USStateCode } from '@/lib/taxonomy/states';
+
+/** A region code is a Canadian province or a US state, never ambiguous between
+ * the two: the four province codes (ON/AB/BC/QC) and the fifty-one US codes
+ * share no letters in common. */
+export type RegionCode = ProvinceCode | USStateCode;
 
 const NORMALIZE_RE = /[^a-z0-9]+/g;
 
@@ -33,7 +46,8 @@ function key(s: string): string {
 
 interface IndexEntry {
   place: OntarioPlace;
-  province: ProvinceCode;
+  country: 'Canada' | 'United States';
+  region: RegionCode;
   needle: string;
 }
 
@@ -48,9 +62,13 @@ const INDEX: IndexEntry[] = (() => {
   const entries: IndexEntry[] = [];
   for (const [province, places] of PROVINCE_PLACES) {
     for (const place of places) {
-      entries.push({ place, province, needle: key(place.name) });
-      for (const alias of place.aliases ?? []) entries.push({ place, province, needle: key(alias) });
+      entries.push({ place, country: 'Canada', region: province, needle: key(place.name) });
+      for (const alias of place.aliases ?? []) entries.push({ place, country: 'Canada', region: province, needle: key(alias) });
     }
+  }
+  for (const place of US_PLACES) {
+    entries.push({ place, country: 'United States', region: place.state, needle: key(place.name) });
+    for (const alias of place.aliases ?? []) entries.push({ place, country: 'United States', region: place.state, needle: key(alias) });
   }
   // Longest needle first so "sault ste marie" wins over "marie", and
   // "north vancouver" wins over "vancouver".
@@ -89,6 +107,20 @@ const PROVINCE_SIGNALS: [ProvinceCode, RegExp][] = [
   ['QC', /\b(quebec|qc|que)\b/],
 ];
 
+/** Every two-letter US state code, as a word-boundary alternation. Built once. */
+const US_STATE_CODE_RE = new RegExp(`\\b(${US_STATE_CODES.map((c) => c.toLowerCase()).join('|')})\\b`);
+
+/**
+ * Written-out US state names, for strings that name a state but no city we
+ * know ("Remote - Texas", "CA, USA"). Built from the full state list so
+ * every state has a signal even though only some have gazetteer cities.
+ */
+const STATE_SIGNALS: [USStateCode, RegExp][] = US_STATE_CODES.map((code) => {
+  const name = US_STATE_NAMES[code].toLowerCase();
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return [code, new RegExp(`\\b(${escaped}|${code.toLowerCase()})\\b`)];
+});
+
 /**
  * Places outside Canada that a bare Canadian city name would otherwise match.
  *
@@ -101,20 +133,23 @@ const PROVINCE_SIGNALS: [ProvinceCode, RegExp][] = [
 const FOREIGN_MARKERS =
   /\b(uk|u k|united kingdom|england|scotland|wales|northern ireland|ireland|dublin|berlin|germany|munich|france|paris|netherlands|amsterdam|belgium|brussels|spain|madrid|barcelona|portugal|lisbon|italy|milan|rome|switzerland|zurich|austria|vienna|sweden|stockholm|norway|oslo|denmark|copenhagen|finland|helsinki|poland|warsaw|krakow|czech|prague|romania|bucharest|ukraine|greece|athens|turkey|istanbul|israel|tel aviv|india|bengaluru|bangalore|hyderabad|mumbai|delhi|pune|chennai|noida|gurgaon|gurugram|singapore|malaysia|kuala lumpur|philippines|manila|japan|tokyo|korea|seoul|china|shanghai|beijing|shenzhen|hong kong|taiwan|australia|sydney|melbourne|brisbane|perth au|new zealand|auckland|wellington nz|south africa|johannesburg|cape town|brazil|sao paulo|argentina|buenos aires|chile|santiago|colombia|bogota|mexico|mexico city|guadalajara|costa rica|uae|dubai|abu dhabi|saudi|riyadh|qatar|doha|egypt|cairo|nigeria|lagos|kenya|nairobi)\b/;
 
-/** US signals. Kept separate so the country can be reported accurately. */
-const US_MARKERS =
-  /\b(united states|usa|u s a|u s |us only|remote us|san francisco|new york|nyc|los angeles|seattle|austin|boston|chicago|denver|atlanta|dallas|houston|miami|phoenix|san diego|san jose|washington dc|bay area|silicon valley)\b/;
-const US_STATE_CODES =
-  /\b(al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy|dc)\b/;
+/**
+ * US signals: the United States is in scope now, so these no longer disqualify
+ * a posting the way FOREIGN_MARKERS do — they instead confirm the country when
+ * a US state or city has been matched, and resolve a named-but-cityless state
+ * ("Remote - Texas").
+ */
+const US_MARKERS = /\b(united states|usa|u s a|u s |us only|remote us|us-based)\b/;
 
 /**
- * Canadian city names far better known as somewhere else. These need a positive
- * Canadian signal in the same string before they count.
+ * City names far better known as somewhere else — within Canada, within the
+ * US, or across the border. These need a positive signal (country, province
+ * or state) in the same string before they count.
  *
- * Adding the western provinces made this list matter more, not less: Vancouver
- * is also in Washington State, Victoria is an Australian state, Surrey is an
- * English county, Langley and Richmond are both in Virginia, and Laval is in
- * France. A bare "Surrey" or "Victoria" is a coin flip at best.
+ * Adding the US made this matter far more: Cambridge is Ontario, England and
+ * Massachusetts; Portland is Oregon and Maine; Richmond is BC and Virginia;
+ * Columbus is Ohio and a dozen smaller towns. A bare mention of any of these
+ * resolves to nothing rather than guessing.
  */
 const AMBIGUOUS_CITIES = new Set([
   // Ontario
@@ -128,22 +163,28 @@ const AMBIGUOUS_CITIES = new Set([
   'edmonton', 'banff', 'brooks', 'olds', 'taber', 'hinton', 'camrose',
   // Quebec
   'laval', 'granby', 'magog', 'mirabel', 'delson',
+  // United States — names shared with a Canadian place above, or well-known
+  // elsewhere, need their own state or country marker to resolve.
+  'portland', 'columbus', 'arlington', 'alexandria', 'fairfax', 'vienna', 'providence',
 ]);
 
 export interface GeoMatch {
   city: string | null;
   region: string | null;
-  /** Two-letter code for the province the posting sits in, when known. */
-  province: ProvinceCode | null;
+  /** Two-letter province or state code the posting sits in, when known. */
+  province: RegionCode | null;
   provinceName: string | null;
+  /** 'Canada' | 'United States', when known. */
   country: string | null;
-  /** In one of the four covered provinces. */
+  /** In Canada or the United States — a covered province/state, or a named one. */
   isInScope: boolean;
   /** Kept for the Ontario-specific relevance bonus and older records. */
   isOntario: boolean;
   isCanada: boolean;
+  /** Mirrors isCanada, for the symmetric US relevance bonus. */
+  isUnitedStates: boolean;
   isRemote: boolean;
-  /** The location field names a place outside Canada and no Canadian one. */
+  /** The location field names a place outside North America and nothing in scope. */
   isForeign: boolean;
 }
 
@@ -161,6 +202,7 @@ function empty(isRemote: boolean, over: Partial<GeoMatch> = {}): GeoMatch {
     isInScope: false,
     isOntario: false,
     isCanada: false,
+    isUnitedStates: false,
     isRemote,
     isForeign: false,
     ...over,
@@ -168,7 +210,7 @@ function empty(isRemote: boolean, over: Partial<GeoMatch> = {}): GeoMatch {
 }
 
 /**
- * Resolve a free-text location string against the four-province gazetteer.
+ * Resolve a free-text location string against the Canada + US gazetteer.
  * Never throws; returns a best-effort match.
  */
 export function matchLocation(raw: string | null | undefined): GeoMatch {
@@ -178,14 +220,16 @@ export function matchLocation(raw: string | null | undefined): GeoMatch {
 
   let city: string | null = null;
   let region: string | null = null;
-  let province: ProvinceCode | null = null;
+  let matchCountry: 'Canada' | 'United States' | null = null;
+  let matchRegion: RegionCode | null = null;
 
   for (const entry of INDEX) {
     // Word-boundary-ish containment on the normalised string.
     if (lower.includes(` ${entry.needle} `) || lower.includes(` ${entry.needle},`)) {
       city = entry.place.name;
       region = entry.place.region;
-      province = entry.province;
+      matchCountry = entry.country;
+      matchRegion = entry.region;
       break;
     }
   }
@@ -196,53 +240,90 @@ export function matchLocation(raw: string | null | undefined): GeoMatch {
       if (entry.needle.length >= 5 && lower.includes(entry.needle)) {
         city = entry.place.name;
         region = entry.place.region;
-        province = entry.province;
+        matchCountry = entry.country;
+        matchRegion = entry.region;
         break;
       }
     }
   }
 
   const namedProvince = PROVINCE_SIGNALS.find(([, re]) => re.test(lower))?.[0] ?? null;
+  const namedState = STATE_SIGNALS.find(([, re]) => re.test(lower))?.[0] ?? null;
   const mentionsCanada =
     CANADA_MARKERS.some((m) => lower.includes(key(m))) || CANADA_PROVINCE_CODES.test(lower) || namedProvince !== null;
+  const mentionsUS = US_MARKERS.test(lower) || namedState !== null || US_STATE_CODE_RE.test(lower);
+  const mentionsEitherCountry = mentionsCanada || mentionsUS;
 
-  // A foreign marker beats a city-name match. "London, UK" and
-  // "Hybrid - San Francisco, New York City, London, Berlin" both contain a
-  // Canadian city name, and neither is in Canada.
-  const foreign = FOREIGN_MARKERS.test(lower) || US_MARKERS.test(lower);
-  if (foreign && !mentionsCanada) {
-    return empty(isRemote, {
-      country: US_MARKERS.test(lower) ? 'United States' : null,
-      isForeign: true,
-    });
+  // A foreign marker beats a city-name match — "London, UK" is not Ontario —
+  // and it takes more than a borrowed state name to argue it back in. Several
+  // US state names double as city names (New York, Washington, Georgia), so
+  // "New York City" alone would otherwise "mention" New York State and
+  // rescue a string that also says "Berlin". Overriding the foreign marker
+  // needs an explicit top-level country word or a province/state CODE
+  // ("ON", "TX") — signals too deliberate to appear by coincidence — not a
+  // bare province/state name, which a city match already supplies on its own
+  // merits via AMBIGUOUS_CITIES/matchCountry below.
+  const explicitCountrySignal =
+    CANADA_MARKERS.some((m) => lower.includes(key(m))) || CANADA_PROVINCE_CODES.test(lower) || US_MARKERS.test(lower) || US_STATE_CODE_RE.test(lower);
+  if (FOREIGN_MARKERS.test(lower) && !explicitCountrySignal) {
+    return empty(isRemote, { isForeign: true });
   }
 
   // Borrowed names need corroboration: a bare "Cambridge" is more likely
-  // England, and a bare "Vancouver" could be Washington State.
-  if (city && !mentionsCanada && AMBIGUOUS_CITIES.has(key(city))) {
+  // England, and a bare "Portland" could be Maine when the match was Oregon.
+  if (city && !mentionsEitherCountry && AMBIGUOUS_CITIES.has(key(city))) {
     city = null;
     region = null;
-    province = null;
+    matchCountry = null;
+    matchRegion = null;
+  }
+  // A matched US city needs a US signal (or at minimum no competing Canadian
+  // one) and vice versa — "Cambridge, Ontario" must not resolve to
+  // Massachusetts just because Cambridge MA sorts first in the index.
+  if (city && matchCountry === 'United States' && mentionsCanada && !mentionsUS) {
+    city = null;
+    region = null;
+    matchCountry = null;
+    matchRegion = null;
+  }
+  if (city && matchCountry === 'Canada' && mentionsUS && !mentionsCanada) {
+    city = null;
+    region = null;
+    matchCountry = null;
+    matchRegion = null;
   }
 
-  // A city we recognise wins; otherwise fall back to a province named outright.
-  const resolved = province ?? namedProvince;
-  const isInScope = resolved !== null;
-  const isCanada = isInScope || mentionsCanada;
+  // A city we recognise wins; otherwise fall back to a province/state named outright.
+  const resolvedRegion: RegionCode | null = matchRegion ?? namedProvince ?? namedState;
+  const resolvedCountry: 'Canada' | 'United States' | null =
+    matchCountry ?? (namedProvince ? 'Canada' : namedState ? 'United States' : mentionsCanada ? 'Canada' : mentionsUS ? 'United States' : null);
+  // In scope means a specific covered region resolved — one of the four
+  // Canadian provinces this board covers, or any US state (the US gazetteer
+  // intentionally covers the whole country). A bare country mention with no
+  // region ("Manitoba", "somewhere in Canada" with no city) is NOT enough:
+  // that is what the separate genuinely-remote-in-country check in
+  // normalize/index.ts exists for, gated on the posting actually being remote.
+  const isInScope = resolvedRegion !== null;
+  const isCanada = resolvedCountry === 'Canada';
+  const isUnitedStates = resolvedCountry === 'United States';
 
-  let country: string | null = null;
-  if (isCanada) country = 'Canada';
-  else if (US_MARKERS.test(lower) || US_STATE_CODES.test(lower)) country = 'United States';
+  const provinceName =
+    resolvedRegion && resolvedCountry === 'Canada'
+      ? PROVINCE_NAMES[resolvedRegion as ProvinceCode]
+      : resolvedRegion && resolvedCountry === 'United States'
+        ? US_STATE_NAMES[resolvedRegion as USStateCode]
+        : null;
 
   return {
     city,
     region,
-    province: resolved,
-    provinceName: resolved ? PROVINCE_NAMES[resolved] : null,
-    country,
+    province: resolvedRegion,
+    provinceName,
+    country: resolvedCountry,
     isInScope,
-    isOntario: resolved === 'ON',
+    isOntario: resolvedRegion === 'ON',
     isCanada,
+    isUnitedStates,
     isRemote,
     isForeign: false,
   };
@@ -264,8 +345,15 @@ export function regionForCity(city: string | null): string | null {
   return INDEX.find((e) => e.needle === needle)?.place.region ?? null;
 }
 
-export function provinceForCity(city: string | null): ProvinceCode | null {
+export function provinceForCity(city: string | null): RegionCode | null {
   if (!city) return null;
   const needle = key(city);
-  return INDEX.find((e) => e.needle === needle)?.province ?? null;
+  return INDEX.find((e) => e.needle === needle)?.region ?? null;
+}
+
+/** 'Canada' | 'United States' the given city belongs to, when known. */
+export function countryForCity(city: string | null): 'Canada' | 'United States' | null {
+  if (!city) return null;
+  const needle = key(city);
+  return INDEX.find((e) => e.needle === needle)?.country ?? null;
 }
