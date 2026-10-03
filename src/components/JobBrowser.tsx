@@ -20,10 +20,10 @@ import type { Job, JobFilters, JobSearchResult, SortKey } from '@/lib/types';
 
 type ApiResult = JobSearchResult & { deepLinks: DeepLinkItem[] };
 
-/** Province name of a single selected city, so deep links search the right place. */
-function provinceForCity(jobs: Job[], cities: string[] | undefined): string | undefined {
+/** Region code (province or state) of a single selected city, so deep links search the right place. */
+function regionForSelectedCity(jobs: Job[], cities: string[] | undefined): string | undefined {
   if (!cities || cities.length !== 1) return undefined;
-  return jobs.find((j) => j.city === cities[0])?.provinceName ?? undefined;
+  return jobs.find((j) => j.city === cities[0])?.province ?? undefined;
 }
 
 const SORTS: { value: SortKey; label: string }[] = [
@@ -120,7 +120,7 @@ export function JobBrowser() {
   useEffect(() => {
     if (!dataset) return;
     const result = searchJobs(dataset, filters, { lastIngestAt: generatedAt, notes: [], degraded: false, matchScores });
-    setData({ ...result, deepLinks: buildDeepLinks(filters, provinceForCity(dataset, filters.cities)) });
+    setData({ ...result, deepLinks: buildDeepLinks(filters, regionForSelectedCity(dataset, filters.cities)) });
     setVisiblePages(1);
   }, [dataset, filters, generatedAt, matchScores]);
 
@@ -202,17 +202,36 @@ export function JobBrowser() {
 
   return (
     <div className="space-y-4">
-      <section className="card p-4">
-        <h1 className="text-lg font-semibold tracking-tight">Cybersecurity jobs across Ontario, Alberta, BC &amp; Quebec</h1>
-        <p className="mt-1 max-w-3xl text-sm leading-relaxed text-muted/80">
-          Postings collected hourly from company career-site APIs, the federal Job Bank and licensed job APIs —
-          deduplicated, categorised and ranked.
-        </p>
-        <p className="mt-2 text-sm">
-          <Link href="/start" className="font-medium text-brand hover:underline">
-            New to cybersecurity? Start here →
-          </Link>
-        </p>
+      <section className="card relative overflow-hidden p-5">
+        {/* A quiet brand-to-accent wash behind the hero only — everywhere else
+            stays flat, so this doesn't read as decoration piled on decoration. */}
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-gradient-to-br from-brand/10 via-transparent to-accent/10"
+        />
+        <div className="relative">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-brand/15 text-brand" aria-hidden>
+              <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2l8 4v6c0 5-3.4 8.4-8 10-4.6-1.6-8-5-8-10V6l8-4z" />
+                <path d="M9 12l2 2 4-4" />
+              </svg>
+            </span>
+            <h1 className="text-xl font-bold tracking-tight">
+              Cybersecurity jobs across <span className="text-brand">Canada</span> &amp; the{' '}
+              <span className="text-accent">United States</span>
+            </h1>
+          </div>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted/80">
+            Postings collected hourly from company career-site APIs, government job boards and licensed job APIs —
+            audited, deduplicated, categorised and ranked.
+          </p>
+          <p className="mt-2 text-sm">
+            <Link href="/start" className="font-medium text-brand hover:underline">
+              New to cybersecurity? Start here →
+            </Link>
+          </p>
+        </div>
         <div className="mt-3">
           <SearchBar
             value={filters.q ?? ''}
