@@ -32,6 +32,10 @@ export function JobCard({
   matchScore?: number;
 }) {
   const salary = formatSalary(job.salary);
+  // A small flag is the fastest possible scan signal on a board that now
+  // spans two countries — faster to read than "ON" vs "NY" at this size,
+  // and it costs nothing when the posting's country isn't resolved.
+  const countryFlag = job.country === 'Canada' ? '🇨🇦' : job.country === 'United States' ? '🇺🇸' : null;
   const location = [job.city, job.region].filter(Boolean).join(' · ') || job.locationRaw;
   const tech = job.requirements.technologies.slice(0, 6);
   const certs = job.requirements.certifications.slice(0, 4);
@@ -53,7 +57,13 @@ export function JobCard({
               </h3>
               <p className="mt-0.5 text-sm text-muted">
                 <span className="font-medium text-ink">{job.company}</span>
-                {location ? <> · {location}</> : null}
+                {location ? (
+                  <>
+                    {' '}
+                    · {countryFlag ? <span aria-hidden>{countryFlag} </span> : null}
+                    {location}
+                  </>
+                ) : null}
               </p>
             </div>
 
