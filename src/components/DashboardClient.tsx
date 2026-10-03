@@ -2,7 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { loadDataset } from '@/lib/client/dataset';
-import { CATEGORY_LABELS, EXPERIENCE_LABELS } from '@/lib/types';
+import { CATEGORY_LABELS, EXPERIENCE_LABELS, EXPERIENCE_LEVELS } from '@/lib/types';
+import { PROVINCE_NAMES, US_STATE_NAMES } from '@/lib/taxonomy/canada';
+
+const REGION_LABELS: Record<string, string> = { ...PROVINCE_NAMES, ...US_STATE_NAMES, other: 'Remote / unspecified' };
 import type { Job } from '@/lib/types';
 import { TrendChart } from '@/components/TrendChart';
 import { BarList } from '@/components/BarList';
@@ -13,6 +16,24 @@ function countBy<T extends string>(items: T[], labels?: Record<string, string>) 
   return [...map.entries()]
     .sort((a, b) => b[1] - a[1])
     .map(([key, count]) => ({ key, label: labels?.[key] ?? key, count }));
+}
+
+/**
+ * Same tally as countBy, but ordered by a given sequence (the seniority
+ * ladder) instead of by count — "By experience level" reads as a ladder a
+ * reader already knows, not a shuffled popularity list, which is the whole
+ * point of using the industry-standard order everywhere else on the site
+ * already uses it. Keys with zero postings are dropped; any key in `items`
+ * but not in `order` is appended at the end rather than silently lost.
+ */
+function countByOrder<T extends string>(items: T[], order: readonly T[], labels: Record<string, string>) {
+  const map = new Map<string, number>();
+  for (const i of items) map.set(i, (map.get(i) ?? 0) + 1);
+  const known = new Set<string>(order);
+  const rest = [...map.keys()].filter((k) => !known.has(k)).sort();
+  return [...order, ...rest]
+    .filter((key) => (map.get(key) ?? 0) > 0)
+    .map((key) => ({ key, label: labels[key] ?? key, count: map.get(key) ?? 0 }));
 }
 
 function trendSeries(jobs: Job[], days = 30) {
@@ -126,19 +147,27 @@ export function DashboardClient() {
         />
         <BarList
           title="By experience level"
-          items={countBy(live.map((j) => j.experienceLevel), EXPERIENCE_LABELS as Record<string, string>)}
+          items={countByOrder(live.map((j) => j.experienceLevel), [...EXPERIENCE_LEVELS, 'unknown'], EXPERIENCE_LABELS as Record<string, string>)}
           hrefFor={(key) => `/?experience=${encodeURIComponent(key)}`}
         />
         <BarList
-          title="By province"
-          items={countBy(live.map((j) => j.provinceName ?? (j.workArrangement === 'remote' ? 'Remote (Canada)' : 'Unspecified')))}
-          hrefFor={(key) =>
-            `/?province=${encodeURIComponent({ Ontario: 'ON', Alberta: 'AB', 'British Columbia': 'BC', Quebec: 'QC' }[key] ?? 'other')}`
-          }
+          title="By country"
+          items={countBy(live.map((j) => j.country ?? 'Remote / unspecified'))}
+          hrefFor={(key) => `/?country=${encodeURIComponent(key === 'Remote / unspecified' ? 'other' : key)}`}
         />
         <BarList
-          title="By region"
-          items={countBy(live.map((j) => j.region ?? (j.workArrangement === 'remote' ? 'Remote (Canada)' : 'Unspecified')))}
+          title="By state / province"
+          // Keyed and linked by the region CODE (never ambiguous between a
+          // Canadian province and a US state), labelled with its full name —
+          // the old version built the link by reversing the display label
+          // through a Canada-only lookup, so a US state silently linked to
+          // "Remote / unspecified" instead of itself.
+          items={countBy(live.map((j) => j.province ?? 'other'), REGION_LABELS).slice(0, 15)}
+          hrefFor={(key) => `/?province=${encodeURIComponent(key)}`}
+        />
+        <BarList
+          title="By metro area"
+          items={countBy(live.map((j) => j.region ?? (j.workArrangement === 'remote' ? `Remote (${j.country ?? 'unspecified'})` : 'Unspecified'))).slice(0, 15)}
         />
         <BarList
           title="Top cities"

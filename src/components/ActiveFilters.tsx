@@ -2,12 +2,12 @@
 
 import type { JobFilters, JobSearchResult } from '@/lib/types';
 import { CATEGORY_LABELS, EMPLOYMENT_LABELS, EXPERIENCE_LABELS } from '@/lib/types';
+import { COUNTRY_LABELS } from '@/lib/query';
+import { PROVINCE_NAMES as CA_PROVINCE_NAMES, US_STATE_NAMES } from '@/lib/taxonomy/canada';
 
-const PROVINCE_NAMES: Record<string, string> = {
-  ON: 'Ontario',
-  BC: 'British Columbia',
-  QC: 'Quebec',
-  AB: 'Alberta',
+const REGION_NAMES: Record<string, string> = {
+  ...CA_PROVINCE_NAMES,
+  ...US_STATE_NAMES,
   other: 'Remote / other',
 };
 
@@ -24,7 +24,7 @@ interface Pill {
   remove: Partial<JobFilters>;
 }
 
-type ListKey = 'provinces' | 'experience' | 'arrangement' | 'categories' | 'employment' | 'cities' | 'companies' | 'skills' | 'certifications' | 'sources';
+type ListKey = 'countries' | 'provinces' | 'experience' | 'arrangement' | 'categories' | 'employment' | 'cities' | 'companies' | 'skills' | 'certifications' | 'sources';
 
 /**
  * Everything currently narrowing the results, as removable pills above the
@@ -64,7 +64,8 @@ export function ActiveFilters({
   if (filters.postedTo) pills.push({ key: 'to', label: `To ${filters.postedTo}`, remove: { postedTo: undefined, page: 1 } });
   list('experience', (v) => EXPERIENCE_LABELS[v as keyof typeof EXPERIENCE_LABELS] ?? v);
   list('arrangement', (v) => ARRANGEMENT_NAMES[v] ?? v);
-  list('provinces', (v) => PROVINCE_NAMES[v] ?? v);
+  list('countries', (v) => COUNTRY_LABELS[v] ?? v);
+  list('provinces', (v) => REGION_NAMES[v] ?? v);
   list('cities', (v) => (v === 'Other' ? 'Other locations' : v));
   list('categories', (v) => CATEGORY_LABELS[v as keyof typeof CATEGORY_LABELS] ?? v);
   list('employment', (v) => EMPLOYMENT_LABELS[v as keyof typeof EMPLOYMENT_LABELS] ?? v);
