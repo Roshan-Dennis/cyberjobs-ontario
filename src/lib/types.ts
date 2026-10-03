@@ -30,13 +30,19 @@ export const EXPERIENCE_LEVELS: ExperienceLevel[] = [
   'executive',
 ];
 
+// Industry-standard seniority labels, in ascending order — the same ladder
+// LinkedIn, Indeed and most ATS platforms use, with the two splits (Co-op
+// alongside Internship; Junior alongside Entry-Level) that Canadian postings
+// in particular distinguish often enough to be worth keeping separate. The
+// array order above IS this ladder; everywhere levels are listed, they are
+// listed in this order rather than sorted by how many postings exist.
 export const EXPERIENCE_LABELS: Record<ExperienceLevel, string> = {
   internship: 'Internship',
   coop: 'Co-op',
-  entry: 'Entry level',
+  entry: 'Entry-Level',
   junior: 'Junior',
-  mid: 'Mid level',
-  senior: 'Senior',
+  mid: 'Mid-Level',
+  senior: 'Senior-Level',
   lead: 'Lead / Principal',
   manager: 'Manager',
   director: 'Director',
@@ -175,9 +181,11 @@ export interface Job {
   country: string | null;
   /** Posting language, for the FR badge and the translation link. */
   language: 'en' | 'fr';
-  /** Two-letter province code, when the posting resolves to one. */
-  province: 'ON' | 'AB' | 'BC' | 'QC' | null;
+  /** Two-letter province or state code, when the posting resolves to one. */
+  province: string | null;
   provinceName: string | null;
+  /** Mirrors isCanada; set for US postings (resolved or genuinely remote-US). */
+  isUnitedStates: boolean;
   isOntario: boolean;
   isCanada: boolean;
 
@@ -225,6 +233,7 @@ export interface JobFilters {
   categories?: JobCategory[];
   arrangement?: WorkArrangement[];
   employment?: EmploymentType[];
+  countries?: string[];
   provinces?: string[];
   cities?: string[];
   companies?: string[];
@@ -260,6 +269,7 @@ export interface JobSearchResult {
   pageSize: number;
   totalPages: number;
   facets: {
+    countries: Facet[];
     provinces: Facet[];
     categories: Facet[];
     experience: Facet[];

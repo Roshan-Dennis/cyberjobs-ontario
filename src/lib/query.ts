@@ -1,4 +1,5 @@
 import { CATEGORY_LABELS, EMPLOYMENT_LABELS, EXPERIENCE_LABELS } from '@/lib/types';
+import { PROVINCE_NAMES, US_STATE_NAMES } from '@/lib/taxonomy/canada';
 import type { Facet, Job, JobFilters, JobSearchResult, SortKey } from '@/lib/types';
 
 const ARRANGEMENT_LABELS: Record<string, string> = {
@@ -6,6 +7,20 @@ const ARRANGEMENT_LABELS: Record<string, string> = {
   hybrid: 'Hybrid',
   onsite: 'On-site',
   unknown: 'Not specified',
+};
+
+/** Country bucket a job falls into for the top level of the location filter. */
+export const COUNTRY_LABELS: Record<string, string> = {
+  Canada: 'Canada',
+  'United States': 'United States',
+  other: 'Remote / unspecified',
+};
+
+/** Province and state names in one lookup, so one facet can span both countries. */
+const REGION_LABELS: Record<string, string> = {
+  ...PROVINCE_NAMES,
+  ...US_STATE_NAMES,
+  other: 'Remote / unspecified',
 };
 
 /* ------------------------------------------------------------------ */
@@ -113,6 +128,7 @@ function passesNonTextFilters(job: Job, f: JobFilters, now: number): boolean {
   if (f.onlyPathway && !job.isPathwayRole) return false;
   if (f.includePathway === false && job.isPathwayRole) return false;
 
+  if (!inList(job.country ?? 'other', f.countries)) return false;
   if (!inList(job.province ?? 'other', f.provinces)) return false;
   if (!inList(job.experienceLevel, f.experience)) return false;
   if (!inList(job.category, f.categories)) {
@@ -255,9 +271,13 @@ export function searchJobs(
     return textPool.filter((job) => passesNonTextFilters(job, relaxed, now));
   };
 
-  // Province counts ignore both the province filter and the narrower city
-  // filter. Province is the top-level cut, so picking Montreal should not make
-  // the other three provinces disappear from the sidebar.
+  // Country counts ignore the country filter and both of its narrower
+  // children (province/state and city), so picking "United States" does not
+  // make "Canada" disappear from the top of the location filter.
+  const countryPool = poolWithout('countries', 'provinces', 'cities');
+  // Province/state counts ignore that filter and the narrower city filter,
+  // but DO respect the country filter — picking "United States" should
+  // narrow the region list to US states, the whole point of the cascade.
   const provincePool = poolWithout('provinces', 'cities');
   const cityPool = poolWithout('cities');
 
@@ -268,15 +288,12 @@ export function searchJobs(
     pageSize,
     totalPages,
     facets: {
+      countries: facet(countryPool.map((j) => j.country ?? 'other'), COUNTRY_LABELS, 4),
       categories: facet(poolWithout('categories').map((j) => j.category), CATEGORY_LABELS as Record<string, string>),
       experience: facet(poolWithout('experience').map((j) => j.experienceLevel), EXPERIENCE_LABELS as Record<string, string>, 12),
       arrangement: facet(poolWithout('arrangement').map((j) => j.workArrangement), ARRANGEMENT_LABELS, 6),
       employment: facet(poolWithout('employment').map((j) => j.employmentType), EMPLOYMENT_LABELS as Record<string, string>, 8),
-      provinces: facet(
-        provincePool.map((j) => j.province ?? 'other'),
-        { ON: 'Ontario', AB: 'Alberta', BC: 'British Columbia', QC: 'Quebec', other: 'Remote / unspecified' },
-        5,
-      ),
+      provinces: facet(provincePool.map((j) => j.province ?? 'other'), REGION_LABELS, 60),
       cities: facet(cityPool.map(cityLabel), undefined, 60),
       // Cities grouped by the province that owns them. With four provinces in
       // one list, Toronto, Calgary and Montreal sat side by side with nothing
@@ -308,6 +325,7 @@ export function searchJobs(
 /** How many filters are narrowing the results (search text not included). */
 export function countActiveFilters(f: JobFilters): number {
   return (
+    (f.countries?.length ?? 0) +
     (f.provinces?.length ?? 0) +
     (f.experience?.length ?? 0) +
     (f.categories?.length ?? 0) +
@@ -368,6 +386,7 @@ export function filtersFromSearchParams(params: URLSearchParams): JobFilters {
     categories: csv(params.get('category')) as JobFilters['categories'],
     arrangement: csv(params.get('arrangement')) as JobFilters['arrangement'],
     employment: csv(params.get('employment')) as JobFilters['employment'],
+    countries: csv(params.get('country')),
     provinces: csv(params.get('province')),
     cities: csv(params.get('city')),
     companies: csv(params.get('company')),
@@ -394,6 +413,7 @@ export function searchParamsFromFilters(f: JobFilters): URLSearchParams {
     if (v && v.length) p.set(k, v.join(','));
   };
   if (f.q) p.set('q', f.q);
+  setList('country', f.countries);
   setList('province', f.provinces);
   setList('experience', f.experience);
   setList('category', f.categories);
