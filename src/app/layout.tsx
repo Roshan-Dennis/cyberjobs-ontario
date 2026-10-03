@@ -6,11 +6,11 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: `${config.appName} — live cybersecurity jobs across Canada`,
+    default: `${config.appName} — live cybersecurity jobs across Canada & the US`,
     template: `%s · ${config.appName}`,
   },
   description:
-    'Live cybersecurity job postings across Ontario, Alberta, British Columbia and Quebec, plus remote-Canada roles, aggregated from company career boards, the federal Job Bank and licensed job APIs. Filter by province, experience, category, salary and skills.',
+    'Live cybersecurity job postings across Canada and the United States — every province and all 50 states — aggregated from company career boards, government job boards and licensed job APIs. Filter by country, state/province, experience, category, salary and skills.',
   keywords: [
     'cybersecurity jobs Ontario',
     'cybersecurity jobs Alberta',
@@ -20,6 +20,10 @@ export const metadata: Metadata = {
     'security analyst Calgary Vancouver Montreal',
     'cyber security co-op Canada',
     'penetration tester Canada',
+    'cybersecurity jobs United States',
+    'SOC analyst jobs remote USA',
+    'security analyst jobs New York San Francisco Washington DC',
+    'cybersecurity jobs near me',
   ],
   // metadataBase makes og:image resolve to an absolute URL, which every link
   // preview (LinkedIn, Slack, iMessage) requires — a relative path is ignored.
@@ -27,17 +31,17 @@ export const metadata: Metadata = {
   // LinkedIn's Post Inspector warns below 100 characters, so the share
   // description is written long enough to clear that bar.
   openGraph: {
-    title: `${config.appName} — cybersecurity jobs across Canada`,
-    description: 'Live cybersecurity job postings across Ontario, Alberta, British Columbia and Quebec — collected hourly from employer career APIs and the federal Job Bank, deduplicated and filterable by province, certification, tool and seniority.',
+    title: `${config.appName} — cybersecurity jobs across Canada & the US`,
+    description: 'Live cybersecurity job postings across Canada and the United States — collected hourly from employer career APIs and government job boards, deduplicated and filterable by country, state/province, certification, tool and seniority.',
     type: 'website',
     locale: 'en_CA',
     siteName: config.appName,
-    images: [{ url: '/og.png', width: 1200, height: 630, alt: `${config.appName} — cybersecurity jobs across Ontario, Alberta, British Columbia and Quebec` }],
+    images: [{ url: '/og.png', width: 1200, height: 630, alt: `${config.appName} — cybersecurity jobs across Canada and the United States` }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: `${config.appName} — cybersecurity jobs across Canada`,
-    description: 'Live cybersecurity job postings across Ontario, Alberta, British Columbia and Quebec — collected hourly from employer career APIs and the federal Job Bank, deduplicated and filterable by province, certification, tool and seniority.',
+    title: `${config.appName} — cybersecurity jobs across Canada & the US`,
+    description: 'Live cybersecurity job postings across Canada and the United States — collected hourly from employer career APIs and government job boards, deduplicated and filterable by country, state/province, certification, tool and seniority.',
     images: ['/og.png'],
   },
   alternates: { canonical: '/' },
