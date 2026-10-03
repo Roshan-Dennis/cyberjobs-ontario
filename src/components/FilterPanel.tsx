@@ -3,7 +3,8 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { Facet, JobFilters, JobSearchResult } from '@/lib/types';
 import { CATEGORY_LABELS, EMPLOYMENT_LABELS, EXPERIENCE_LEVELS, EXPERIENCE_LABELS } from '@/lib/types';
-import { countActiveFilters } from '@/lib/query';
+import { countActiveFilters, COUNTRY_LABELS } from '@/lib/query';
+import { PROVINCE_CODES, US_STATE_CODES } from '@/lib/taxonomy/canada';
 
 interface Props {
   filters: JobFilters;
@@ -22,14 +23,25 @@ const DATE_OPTIONS: { label: string; value: number | undefined }[] = [
   { label: '30 days', value: 30 },
 ];
 
-/** Short province names: they sit in pills, where "British Columbia" wraps. */
-const PROVINCE_SHORT: Record<string, string> = {
+/** Short region names for the pill/list labels: full province names (they are
+ * few), two-letter codes for US states (there can be up to 51 of them, and
+ * "CA"/"NY"/"TX" is how job boards conventionally show them). */
+const REGION_SHORT: Record<string, string> = {
   ON: 'Ontario',
   BC: 'B.C.',
   QC: 'Quebec',
   AB: 'Alberta',
   other: 'Remote / other',
+  ...Object.fromEntries(US_STATE_CODES.map((c) => [c, c])),
 };
+
+const CANADA_CODES = new Set<string>(PROVINCE_CODES);
+const US_CODES = new Set<string>(US_STATE_CODES);
+function countryOfRegion(code: string): string {
+  if (CANADA_CODES.has(code)) return 'Canada';
+  if (US_CODES.has(code)) return 'United States';
+  return 'other';
+}
 
 const ARRANGEMENT_NAMES: Record<string, string> = {
   remote: 'Remote',
@@ -417,13 +429,25 @@ export function FilterPanel({ filters, facets, onChange, onReset }: Props) {
     })
     .filter((f) => f.count > 0 || (filters.experience ?? []).includes(f.value as never));
 
-  const provinceFacets: Facet[] = (facets?.provinces ?? []).map((f) => ({ ...f, label: PROVINCE_SHORT[f.value] ?? f.label }));
+  // Country → region → city, each step appearing once the one before it has a
+  // selection — unless there is realistically only one country or one region
+  // on the board right now, in which case skipping the extra click shows the
+  // useful level immediately instead of making the reader click through an
+  // empty choice.
+  const countryFacets: Facet[] = facets?.countries ?? [];
+  const selectedCountries = filters.countries ?? [];
+  const regionsVisibleFor = selectedCountries.length ? selectedCountries : countryFacets.map((f) => f.value);
+  const regionFacets: Facet[] = (facets?.provinces ?? [])
+    .filter((f) => f.value === 'other' || regionsVisibleFor.includes(countryOfRegion(f.value)))
+    .map((f) => ({ ...f, label: REGION_SHORT[f.value] ?? f.label }));
+  const showRegionStep = selectedCountries.length > 0 || countryFacets.length <= 1;
+  const showCityStep = (filters.provinces?.length ?? 0) > 0 || regionFacets.length <= 1;
 
-  // One city list for every province, each city tagged with its province, in
-  // place of five separate per-province sections.
-  const cityProvince = new Map<string, string>();
-  for (const [prov, group] of Object.entries(facets?.citiesByProvince ?? {})) {
-    for (const f of group) if (!cityProvince.has(f.value)) cityProvince.set(f.value, prov);
+  // One city list for every region, each city tagged with its region code, in
+  // place of dozens of separate per-region sections.
+  const cityRegion = new Map<string, string>();
+  for (const [region, group] of Object.entries(facets?.citiesByProvince ?? {})) {
+    for (const f of group) if (!cityRegion.has(f.value)) cityRegion.set(f.value, region);
   }
   const cityFacets: Facet[] = (facets?.cities ?? []).map((f) => ({
     ...f,
@@ -431,7 +455,7 @@ export function FilterPanel({ filters, facets, onChange, onReset }: Props) {
   }));
 
   const anyTime = !filters.postedWithinDays && !customDates && !showCustom;
-  const locationCount = (filters.provinces?.length ?? 0) + (filters.cities?.length ?? 0);
+  const locationCount = (filters.countries?.length ?? 0) + (filters.provinces?.length ?? 0) + (filters.cities?.length ?? 0);
 
   return (
     <aside className="card px-4 pb-2 pt-3" aria-label="Filters">
@@ -538,31 +562,57 @@ export function FilterPanel({ filters, facets, onChange, onReset }: Props) {
       <Section
         title="Location"
         count={locationCount}
-        empty={provinceFacets.length === 0 && cityFacets.length === 0 && locationCount === 0}
+        empty={countryFacets.length === 0 && cityFacets.length === 0 && locationCount === 0}
       >
-        {provinceFacets.length > 1 || (filters.provinces?.length ?? 0) > 0 ? (
-          <PillChecks
-            name="provinces"
-            facets={provinceFacets}
-            selected={filters.provinces ?? []}
-            onToggle={toggler('provinces')}
-            labelFor={lookup(PROVINCE_SHORT)}
-          />
-        ) : null}
-        <div className="mt-3">
-          <CheckList
-            name="cities"
-            facets={cityFacets}
-            selected={filters.cities ?? []}
-            onToggle={toggler('cities')}
-            limit={5}
-            labelFor={(v) => (v === 'Other' ? 'Other locations' : v)}
-            searchLabel="Search cities"
-            describe={(city) => {
-              const p = cityProvince.get(city);
-              return p && p !== 'other' ? p : undefined;
-            }}
-          />
+        <div className="space-y-3">
+          <div>
+            <p className="mb-1.5 text-xs font-medium text-muted">Country</p>
+            <PillChecks
+              name="countries"
+              facets={countryFacets}
+              selected={selectedCountries}
+              onToggle={toggler('countries')}
+              labelFor={lookup(COUNTRY_LABELS)}
+            />
+          </div>
+          {showRegionStep ? (
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-muted">
+                {regionsVisibleFor.includes('United States') && !regionsVisibleFor.includes('Canada') ? 'State' : 'State / Province'}
+              </p>
+              <CheckList
+                name="provinces"
+                facets={regionFacets}
+                selected={filters.provinces ?? []}
+                onToggle={toggler('provinces')}
+                limit={8}
+                labelFor={lookup(REGION_SHORT)}
+                searchLabel={regionFacets.length > 8 ? 'Search states/provinces' : undefined}
+              />
+            </div>
+          ) : (
+            <p className="text-xs text-muted">Choose a country above to narrow by state or province.</p>
+          )}
+          {showCityStep ? (
+            <div>
+              <p className="mb-1.5 text-xs font-medium text-muted">City</p>
+              <CheckList
+                name="cities"
+                facets={cityFacets}
+                selected={filters.cities ?? []}
+                onToggle={toggler('cities')}
+                limit={6}
+                labelFor={(v) => (v === 'Other' ? 'Other locations' : v)}
+                searchLabel="Search cities"
+                describe={(city) => {
+                  const r = cityRegion.get(city);
+                  return r && r !== 'other' ? r : undefined;
+                }}
+              />
+            </div>
+          ) : (
+            <p className="text-xs text-muted">Choose a state or province above to narrow by city.</p>
+          )}
         </div>
       </Section>
 
