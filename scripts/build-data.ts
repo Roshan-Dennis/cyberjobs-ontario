@@ -21,6 +21,7 @@ import path from 'node:path';
 import { runIngest } from '../src/lib/ingest';
 import { config } from '../src/lib/config';
 import { mergeSnapshots, revalidate, sanityCheck } from '../src/lib/merge';
+import { getWorkdayDiscoveryReport } from '../src/lib/sources/workday';
 import type { Job } from '../src/lib/types';
 
 /** How much description text to ship to the browser, per job. */
@@ -125,6 +126,16 @@ async function main(): Promise<void> {
   const clientPath = path.join(process.cwd(), 'public', 'data', 'jobs.json');
   await fs.writeFile(fullPath, JSON.stringify(full), 'utf8');
   await fs.writeFile(clientPath, JSON.stringify(client), 'utf8');
+
+  // Which Workday employers were found from their robots.txt. The next run
+  // reads it back (like the snapshot) so it does not re-probe every hour, and
+  // it is public so anyone can see which employers are being searched.
+  const discovery = getWorkdayDiscoveryReport();
+  if (discovery) {
+    await fs.writeFile(path.join(process.cwd(), 'public', 'data', 'workday-discovery.json'), JSON.stringify(discovery, null, 1), 'utf8');
+    const found = discovery.entries.filter((e) => e.status === 'found');
+    console.log(`  workday discovery: ${found.length}/${discovery.entries.length} employers — ${found.map((e) => `${e.tenant}(${e.sites.map((x) => x.site).join('|')})`).join(', ')}`);
+  }
 
   const kb = async (p: string) => Math.round((await fs.stat(p)).size / 1024);
 

@@ -18,6 +18,7 @@ import { CAREERS, CAREER_BY_SLUG, CAREER_MAP } from '../src/lib/careers/catalog'
 import { careerStats, jobsFor, boardLink } from '../src/lib/careers/stats';
 import { QUIZ, scoreQuiz } from '../src/lib/careers/quiz';
 import { GLOSSARY } from '../src/lib/careers/glossary';
+import { parseWorkdaySites, discoverTenant, MAX_SITES_PER_TENANT } from '../src/lib/sources/workday-discovery';
 import { searchJobs, filtersFromSearchParams, searchParamsFromFilters, countActiveFilters } from '../src/lib/query';
 import { parseSalary } from '../src/lib/normalize/salary';
 import { matchLocation } from '../src/lib/taxonomy/canada';
@@ -1143,7 +1144,86 @@ check('Quiz options only point at real careers', QUIZ.every((q) => q.options.eve
 }
 check('Glossary terms are unique', new Set(GLOSSARY.map((g) => g.term.toLowerCase())).size === GLOSSARY.length);
 
+
 /* ------------------------------------------------------------------ */
-console.log(`\n${'='.repeat(70)}`);
-console.log(`${passed} passed, ${failed} failed`);
-if (failed > 0) process.exit(1);
+section('Workday discovery from robots.txt');
+
+// tsx compiles this file to CommonJS, which has no top-level await, so the
+// async checks run in a function and the summary waits for it.
+const asyncChecks = (async () => {
+  const host = 'acme.wd3.myworkdayjobs.com';
+  const robots = [
+    'User-agent: *',
+    'Disallow: /wday/',
+    `Sitemap: https://${host}/Acme_Careers/siteMap.xml`,
+    `Sitemap: https://${host}/en-US/Acme_Campus/siteMap.xml`,
+    'Sitemap: https://other.wd3.myworkdayjobs.com/NotOurs/siteMap.xml',
+  ].join('\n');
+  check('Sitemap lines give the site names (locale segment skipped, other hosts ignored)', JSON.stringify(parseWorkdaySites(robots, host)) === '["Acme_Careers","Acme_Campus"]', parseWorkdaySites(robots, host));
+  check('Allow lines are the fallback', JSON.stringify(parseWorkdaySites('Allow: /Acme_Jobs/\nAllow: /wday/x', host)) === '["Acme_Jobs"]');
+  check('A robots.txt with no sites yields none', parseWorkdaySites('User-agent: *\nDisallow:', host).length === 0);
+
+  // A simulated Workday: the tenant lives on wd10, has three sites, one of
+  // which robots.txt forbids and one of which does not answer.
+  const calls: string[] = [];
+  const NOW = new Date(Date.UTC(2026, 9, 3, 12));
+  const deps = (overrides: Partial<import('../src/lib/sources/workday-discovery').DiscoveryDeps> = {}) => ({
+    now: NOW,
+    previous: null,
+    fetchText: async (url: string) => {
+      calls.push(url);
+      if (url === 'https://acme.wd10.myworkdayjobs.com/robots.txt') {
+        return ['Good', 'Blocked', 'Broken'].map((x) => `Sitemap: https://acme.wd10.myworkdayjobs.com/${x}/siteMap.xml`).join('\n');
+      }
+      throw new Error('HTTP 404');
+    },
+    postJson: async (url: string) => {
+      if (url.endsWith('/Good/jobs')) return { total: 42, jobPostings: [] };
+      throw new Error('HTTP 422');
+    },
+    allowed: async (url: string) => !url.includes('/Blocked/'),
+    ...overrides,
+  });
+  const cand = { tenant: 'acme', label: 'Acme' };
+  const e = await discoverTenant(cand, deps());
+  check('Finds the tenant on its shard', e.status === 'found' && e.host === 'acme.wd10.myworkdayjobs.com', e);
+  check('Keeps only sites that answer and robots.txt allows', JSON.stringify(e.sites) === '[{"site":"Good","total":42}]', e.sites);
+  check('Shards are tried in order until one answers', calls[0] === 'https://acme.wd3.myworkdayjobs.com/robots.txt' && calls[1] === 'https://acme.wd10.myworkdayjobs.com/robots.txt', calls);
+
+  calls.length = 0;
+  const again = await discoverTenant(cand, deps({ previous: { generatedAt: '', entries: [e] } }));
+  check('A known tenant is re-checked on its host only', again.status === 'found' && calls.length === 1 && calls[0].includes('wd10'), calls);
+
+  calls.length = 0;
+  const miss = { tenant: 'nobody', label: 'Nobody', status: 'not-found' as const, host: null, sites: [], checkedAt: new Date(NOW.getTime() - 3_600_000).toISOString() };
+  const skipped = await discoverTenant({ tenant: 'nobody', label: 'Nobody' }, deps({ previous: { generatedAt: '', entries: [miss] } }));
+  check('A recent miss is not re-probed', skipped.status === 'not-found' && calls.length === 0, calls);
+  const stale = { ...miss, checkedAt: new Date(NOW.getTime() - 25 * 3_600_000).toISOString() };
+  const reprobed = await discoverTenant({ tenant: 'nobody', label: 'Nobody' }, deps({ previous: { generatedAt: '', entries: [stale] } }));
+  check('A miss older than a day is probed again', reprobed.status === 'not-found' && calls.length === 5, calls.length);
+
+  const many = Array.from({ length: 9 }, (_, i) => `Sitemap: https://big.wd3.myworkdayjobs.com/S${i}/siteMap.xml`).join('\n');
+  const big = await discoverTenant({ tenant: 'big', label: 'Big' }, deps({
+    fetchText: async (url: string) => { if (url.includes('big.wd3')) return many; throw new Error('404'); },
+    postJson: async () => ({ total: 1 }),
+  }));
+  check(`At most ${MAX_SITES_PER_TENANT} sites are taken per employer`, big.sites.length === MAX_SITES_PER_TENANT, big.sites.length);
+
+  const stopped = await discoverTenant({ tenant: 'late', label: 'Late' }, deps({ expired: () => true }));
+  check('Running out of time is not recorded as a miss', stopped.status === 'error' && Date.parse(stopped.checkedAt) === 0, stopped);
+  const kept = await discoverTenant(cand, deps({ expired: () => true, previous: { generatedAt: '', entries: [e] } }));
+  check('A previously found employer keeps its sites when time runs out', kept.status === 'found' && kept.sites.length === 1, kept);
+})();
+
+/* ------------------------------------------------------------------ */
+void asyncChecks.then(
+  () => {
+    console.log(`\n${'='.repeat(70)}`);
+    console.log(`${passed} passed, ${failed} failed`);
+    if (failed > 0) process.exit(1);
+  },
+  (err) => {
+    console.error(err);
+    process.exit(1);
+  },
+);
