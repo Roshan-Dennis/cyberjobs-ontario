@@ -9,7 +9,11 @@ import { detectHybrid, detectRemote, matchLocation } from '@/lib/taxonomy/canada
 import type { Job, RawJob, WorkArrangement } from '@/lib/types';
 
 export interface NormalizeOptions {
-  /** Keep postings outside Ontario when they are remote-Canada. */
+  /**
+   * Keep postings outside a covered province/state when they are genuinely
+   * remote-anywhere in Canada or the US. Name kept from when the board was
+   * Canada-only; it now gates both countries symmetrically.
+   */
   allowRemoteCanada: boolean;
   /** Keep adjacent IT roles that can lead into security. */
   includePathway: boolean;
@@ -125,20 +129,25 @@ export function normalizeJob(raw: RawJob, opts: NormalizeOptions = DEFAULT_NORMA
   else if (remote) arrangement = 'remote';
   else if (geo.city) arrangement = 'onsite';
 
-  // A bare mention of "Canada" anywhere in the description is not evidence that
-  // a role is open to Canada — plenty of US-only postings say "the US and
-  // Canada" in boilerplate. A Plaid role listing New York, Seattle, Raleigh and
-  // San Francisco got in that way. Require the location field to say Canada, or
-  // the text to tie remote and Canada together explicitly.
+  // A bare mention of "Canada" (or "United States") anywhere in the description
+  // is not evidence that a role is open there — plenty of US-only postings say
+  // "the US and Canada" in boilerplate. A Plaid role listing New York, Seattle,
+  // Raleigh and San Francisco got into the Canadian board that way. Require the
+  // location field to say the country, or the text to tie "remote" and the
+  // country together explicitly.
   const REMOTE_CANADA_RE =
     /\b(remote|work\s*from\s*home|distributed|hybrid)\b[^.!?]{0,60}\bcanada\b|\bcanada\b[^.!?]{0,60}\b(remote|work\s*from\s*home|distributed)\b|\banywhere in canada\b|\bcanada[-\s]based\b/i;
+  const REMOTE_US_RE =
+    /\b(remote|work\s*from\s*home|distributed|hybrid)\b[^.!?]{0,60}\b(united states|u\.?s\.?a?\.?)\b|\b(united states|u\.?s\.?a?\.?)\b[^.!?]{0,60}\b(remote|work\s*from\s*home|distributed)\b|\banywhere in the us\b|\bus[-\s]based\b/i;
   const isRemoteCanada =
     arrangement === 'remote' && (geo.isCanada || REMOTE_CANADA_RE.test(locationText));
+  const isRemoteUS =
+    arrangement === 'remote' && (geo.isUnitedStates || REMOTE_US_RE.test(locationText));
 
-  // Geography gate. A location field that names somewhere outside Canada is
-  // decisive: the description cannot argue it back in.
+  // Geography gate. A location field that names somewhere outside Canada and
+  // the US is decisive: the description cannot argue it back in.
   if (!geo.isInScope) {
-    if (geo.isForeign || !(opts.allowRemoteCanada && isRemoteCanada)) {
+    if (geo.isForeign || !(opts.allowRemoteCanada && (isRemoteCanada || isRemoteUS))) {
       return { job: null, reason: `outside coverage (${raw.locationRaw || 'no location'})` };
     }
   }
@@ -183,6 +192,7 @@ export function normalizeJob(raw: RawJob, opts: NormalizeOptions = DEFAULT_NORMA
     provinceName: geo.provinceName,
     isOntario: geo.isOntario,
     isCanada: geo.isCanada || isRemoteCanada,
+    isUnitedStates: geo.isUnitedStates || isRemoteUS,
 
     workArrangement: arrangement,
     experienceLevel,
@@ -226,6 +236,8 @@ export function normalizeJob(raw: RawJob, opts: NormalizeOptions = DEFAULT_NORMA
     descriptionLength: job.description.length,
     isOntario: job.isOntario,
     isRemoteCanada,
+    isUnitedStates: job.isUnitedStates,
+    isRemoteUS,
     isExpired: job.isExpired,
     isPathwayRole: job.isPathwayRole,
   });

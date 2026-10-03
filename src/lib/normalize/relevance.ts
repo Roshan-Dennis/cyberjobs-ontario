@@ -229,6 +229,8 @@ export function computeRankScore(input: {
   descriptionLength: number;
   isOntario: boolean;
   isRemoteCanada: boolean;
+  isUnitedStates: boolean;
+  isRemoteUS: boolean;
   isExpired: boolean;
   isPathwayRole: boolean;
 }): number {
@@ -248,8 +250,14 @@ export function computeRankScore(input: {
   if (input.hasSalary) score += 6;
   if (input.descriptionLength > 1200) score += 4;
   else if (input.descriptionLength < 300) score -= 8;
+  // Canada-first ranking is the product's stated identity; the US bonus is
+  // deliberately smaller so a Canadian posting outranks an equivalent US one
+  // on the default "Best match" sort, while US postings still rank above an
+  // unscored baseline instead of sinking to the bottom of every search.
   if (input.isOntario) score += 8;
   else if (input.isRemoteCanada) score += 4;
+  else if (input.isUnitedStates) score += 6;
+  else if (input.isRemoteUS) score += 3;
   if (input.isPathwayRole) score -= 10;
   if (input.isExpired) score -= 40;
 
