@@ -15,7 +15,7 @@ interface FetchOptions {
   timeoutMs?: number;
   retries?: number;
   headers?: Record<string, string>;
-  method?: 'GET' | 'POST';
+  method?: 'GET' | 'POST' | 'HEAD';
   body?: string;
   /** Treat these statuses as "empty result" rather than an error. */
   softFailStatuses?: number[];

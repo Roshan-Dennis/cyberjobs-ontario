@@ -45,10 +45,11 @@ export function revalidate(jobs: Job[]): { jobs: Job[]; dropped: number } {
   let dropped = 0;
   for (let job of jobs) {
     const geo = matchLocation(job.locationRaw);
-    // Same gate the ingest applies: in Ontario, or genuinely remote-Canada, and
-    // never a location field that names somewhere outside Canada.
-    const remoteCanada = job.workArrangement === 'remote' && geo.isCanada;
-    if (geo.isForeign || !(geo.isInScope || remoteCanada)) {
+    // Same gate the ingest applies: in a covered province/state, or genuinely
+    // remote-Canada/remote-US, and never a location field that names somewhere
+    // outside North America.
+    const remoteInScope = job.workArrangement === 'remote' && (geo.isCanada || geo.isUnitedStates);
+    if (geo.isForeign || !(geo.isInScope || remoteInScope)) {
       dropped += 1;
       continue;
     }
@@ -120,7 +121,13 @@ export function revalidate(jobs: Job[]): { jobs: Job[]; dropped: number } {
             province: geo.province,
             provinceName: geo.provinceName,
             isOntario: geo.isOntario,
+            // geo.isCanada/isUnitedStates already account for the remote case:
+            // matchLocation resolves country from a bare mention ("Remote -
+            // Canada") even with no city match, which is exactly remoteInScope's
+            // signal — OR'ing it in again would wrongly flip a remote-US job's
+            // isCanada true too, since remoteInScope is true for either country.
             isCanada: geo.isCanada,
+            isUnitedStates: geo.isUnitedStates,
           },
     );
   }
