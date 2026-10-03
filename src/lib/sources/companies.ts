@@ -294,3 +294,103 @@ export function boardsWithExtras(base: BoardEntry[], extras: string[]): BoardEnt
   }
   return out;
 }
+
+/* ------------------------------------------------------------------ */
+/* Workday discovery candidates                                        */
+/* ------------------------------------------------------------------ */
+/**
+ * Employers whose career sites are discovered at run time from their own
+ * robots.txt (see workday-discovery.ts) rather than typed in. Only the tenant
+ * name is a guess; a wrong one is reported as "not found" in
+ * /data/workday-discovery.json and costs nothing. Tenants already listed
+ * above are included too, so their other public sites (main careers sites,
+ * campus sites) are picked up; a site already crawled is never added twice.
+ */
+export const WORKDAY_DISCOVER: { tenant: string; label: string; hint?: string }[] = [
+  // Banks, insurers and payments
+  { tenant: 'rbc', label: 'RBC' },
+  { tenant: 'td', label: 'TD Bank' },
+  { tenant: 'cibc', label: 'CIBC' },
+  { tenant: 'bmo', label: 'BMO' },
+  { tenant: 'manulife', label: 'Manulife' },
+  { tenant: 'sunlife', label: 'Sun Life' },
+  { tenant: 'nbc', label: 'National Bank' },
+  { tenant: 'desjardins', label: 'Desjardins' },
+  { tenant: 'intactfc', label: 'Intact Financial' },
+  { tenant: 'intact', label: 'Intact Financial' },
+  { tenant: 'canadalife', label: 'Canada Life' },
+  { tenant: 'cooperators', label: 'The Co-operators' },
+  { tenant: 'equitable', label: 'Equitable Bank' },
+  { tenant: 'moneris', label: 'Moneris' },
+  { tenant: 'interac', label: 'Interac' },
+  { tenant: 'mastercard', label: 'Mastercard' },
+  { tenant: 'pwc', label: 'PwC' },
+  { tenant: 'atb', label: 'ATB Financial' },
+  { tenant: 'bankofcanada', label: 'Bank of Canada' },
+  // Telecom and technology
+  { tenant: 'telus', label: 'TELUS' },
+  { tenant: 'bell', label: 'Bell' },
+  { tenant: 'bce', label: 'Bell' },
+  { tenant: 'cogeco', label: 'Cogeco' },
+  { tenant: 'ciena', label: 'Ciena' },
+  { tenant: 'nokia', label: 'Nokia' },
+  { tenant: 'ericsson', label: 'Ericsson' },
+  { tenant: 'celestica', label: 'Celestica' },
+  { tenant: 'kinaxis', label: 'Kinaxis' },
+  { tenant: 'opentext', label: 'OpenText' },
+  { tenant: 'mitel', label: 'Mitel' },
+  { tenant: 'cae', label: 'CAE' },
+  { tenant: 'thales', label: 'Thales' },
+  { tenant: 'magna', label: 'Magna' },
+  { tenant: 'lululemon', label: 'lululemon' },
+  { tenant: 'dayforce', label: 'Dayforce' },
+  // Energy, utilities and transport
+  { tenant: 'hydroone', label: 'Hydro One' },
+  { tenant: 'opg', label: 'Ontario Power Generation' },
+  { tenant: 'brucepower', label: 'Bruce Power' },
+  { tenant: 'enbridge', label: 'Enbridge' },
+  { tenant: 'tcenergy', label: 'TC Energy' },
+  { tenant: 'fortis', label: 'Fortis' },
+  { tenant: 'bchydro', label: 'BC Hydro' },
+  { tenant: 'hydroottawa', label: 'Hydro Ottawa' },
+  { tenant: 'torontohydro', label: 'Toronto Hydro' },
+  { tenant: 'alectra', label: 'Alectra Utilities' },
+  { tenant: 'metrolinx', label: 'Metrolinx' },
+  { tenant: 'cn', label: 'CN' },
+  { tenant: 'cpkc', label: 'CPKC' },
+  { tenant: 'westjet', label: 'WestJet' },
+  { tenant: 'purolator', label: 'Purolator' },
+  { tenant: 'canadapost', label: 'Canada Post' },
+  // Universities and colleges
+  { tenant: 'mcmaster', label: 'McMaster University' },
+  { tenant: 'uwo', label: 'Western University' },
+  { tenant: 'queensu', label: "Queen's University" },
+  { tenant: 'yorku', label: 'York University' },
+  { tenant: 'carleton', label: 'Carleton University' },
+  { tenant: 'torontomu', label: 'Toronto Metropolitan University' },
+  { tenant: 'uoguelph', label: 'University of Guelph' },
+  { tenant: 'wlu', label: 'Wilfrid Laurier University' },
+  { tenant: 'mcgill', label: 'McGill University' },
+  { tenant: 'ubc', label: 'UBC' },
+  { tenant: 'ualberta', label: 'University of Alberta' },
+  { tenant: 'ucalgary', label: 'University of Calgary' },
+  { tenant: 'sfu', label: 'Simon Fraser University' },
+  { tenant: 'uvic', label: 'University of Victoria' },
+  { tenant: 'concordia', label: 'Concordia University' },
+  { tenant: 'conestogac', label: 'Conestoga College' },
+  { tenant: 'humber', label: 'Humber College' },
+  { tenant: 'senecapolytechnic', label: 'Seneca Polytechnic' },
+  { tenant: 'georgebrown', label: 'George Brown College' },
+  { tenant: 'sheridancollege', label: 'Sheridan College' },
+  { tenant: 'fanshawec', label: 'Fanshawe College' },
+  { tenant: 'mohawkcollege', label: 'Mohawk College' },
+  // Hospitals and health
+  { tenant: 'sickkids', label: 'SickKids' },
+  { tenant: 'sunnybrook', label: 'Sunnybrook Health Sciences' },
+  { tenant: 'hhsc', label: 'Hamilton Health Sciences' },
+  { tenant: 'toh', label: 'The Ottawa Hospital' },
+  { tenant: 'unityhealth', label: 'Unity Health Toronto' },
+  { tenant: 'thp', label: 'Trillium Health Partners' },
+  { tenant: 'lhsc', label: 'London Health Sciences' },
+  { tenant: 'nygh', label: 'North York General' },
+];

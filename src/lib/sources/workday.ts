@@ -1,7 +1,8 @@
 import { config } from '@/lib/config';
-import { fetchJson, mapLimit, setHostDelay } from '@/lib/http';
+import { fetchJson, fetchText, mapLimit, setHostDelay } from '@/lib/http';
 import { isAllowed } from '@/lib/robots';
-import { WORKDAY_TENANTS } from '@/lib/sources/companies';
+import { WORKDAY_DISCOVER, WORKDAY_TENANTS, type WorkdayEntry } from '@/lib/sources/companies';
+import { discoverTenant, type DiscoveryReport } from '@/lib/sources/workday-discovery';
 import { CYBER_QUERY_TERMS } from '@/lib/taxonomy/cyber';
 
 /** "R260024652", "JREQ203319", "2617970" — an identifier, not a place. */
@@ -64,6 +65,73 @@ function postedOnToDate(value: string | undefined): string | null {
  */
 const SEARCH_TERMS = ['security', 'cyber', 'risk'];
 
+/** The latest run's discovery results, published by the build script. */
+let lastDiscovery: DiscoveryReport | null = null;
+export function getWorkdayDiscoveryReport(): DiscoveryReport | null {
+  return lastDiscovery;
+}
+
+/** The previous run's discovery report, from beside the previous snapshot. */
+async function loadPreviousDiscovery(): Promise<DiscoveryReport | null> {
+  const snap = config.ingest.previousSnapshotUrl;
+  if (!snap) return null;
+  try {
+    const url = snap.replace(/[^/]+$/, 'workday-discovery.json');
+    return JSON.parse(await fetchText(url, { retries: 0, timeoutMs: 10_000 })) as DiscoveryReport;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Curated tenants plus any sites discovered from robots.txt (see
+ * workday-discovery.ts). Curated ones come first so they are crawled first if
+ * the time budget runs short; a site already listed is never added twice.
+ */
+async function resolveTenants(ctx: SourceContext): Promise<WorkdayEntry[]> {
+  const previous = await loadPreviousDiscovery();
+  const now = new Date();
+  // Discovery gets at most a third of this source's time; the rest is crawling.
+  const discoveryEnds = Date.now() + Math.min(60_000, ctx.deadline.remaining / 3);
+  const expired = () => ctx.deadline.expired || Date.now() > discoveryEnds;
+
+  const entries = await mapLimit(WORKDAY_DISCOVER, 6, (c) =>
+    discoverTenant(c, {
+      now,
+      previous,
+      expired,
+      fetchText: (url) => fetchText(url, { retries: 0, timeoutMs: 8_000 }),
+      postJson: (url, body) =>
+        fetchJson(url, {
+          method: 'POST',
+          retries: 0,
+          timeoutMs: 15_000,
+          headers: { Accept: 'application/json' },
+          body: JSON.stringify(body),
+        }),
+      allowed: async (url) => (await isAllowed(url, false)).allowed,
+    }),
+  );
+  lastDiscovery = { generatedAt: now.toISOString(), entries };
+
+  const found = entries.filter((e) => e.status === 'found');
+  ctx.log(
+    `workday discovery: ${found.length}/${entries.length} employers found, ${found.reduce((n, e) => n + e.sites.length, 0)} sites`,
+  );
+
+  const key = (host: string, site: string) => `${host.toLowerCase()}/${site.toLowerCase()}`;
+  const seen = new Set(WORKDAY_TENANTS.map((t) => key(t.host, t.site)));
+  const extra: WorkdayEntry[] = [];
+  for (const e of found) {
+    for (const s of e.sites) {
+      if (!e.host || seen.has(key(e.host, s.site)) || s.total === 0) continue;
+      seen.add(key(e.host, s.site));
+      extra.push({ label: e.label, host: e.host, tenant: e.tenant, site: s.site });
+    }
+  }
+  return [...WORKDAY_TENANTS, ...extra];
+}
+
 export const workdaySource: JobSource = {
   id: 'workday',
   name: 'Workday career sites',
@@ -71,11 +139,15 @@ export const workdaySource: JobSource = {
     "Each tenant's own careers page reads this unauthenticated JSON endpoint. We fetch and honour every tenant's robots.txt before requesting, and skip tenants that disallow it.",
   homepage: 'https://www.myworkdayjobs.com',
   isEnabled: () => true,
+  // Discovery adds dozens of career sites; the default 90s cap was sized for
+  // the 31 hand-listed ones.
+  maxDurationMs: 200_000,
   async fetchJobs(ctx: SourceContext): Promise<RawJob[]> {
     const results: RawJob[] = [];
     let blocked = 0;
+    const tenants = await resolveTenants(ctx);
 
-    await mapLimit(WORKDAY_TENANTS, 3, async (tenant) => {
+    await mapLimit(tenants, 4, async (tenant) => {
       if (ctx.deadline.expired) return;
       const base = `https://${tenant.host}/wday/cxs/${tenant.tenant}/${tenant.site}`;
       const searchUrl = `${base}/jobs`;
@@ -151,7 +223,7 @@ export const workdaySource: JobSource = {
       }
     });
 
-    if (blocked) ctx.log(`workday: ${blocked}/${WORKDAY_TENANTS.length} tenants disallow crawling`);
+    if (blocked) ctx.log(`workday: ${blocked}/${tenants.length} tenants disallow crawling`);
 
     // Fetch full descriptions. Every result already came back from a
     // security-term search, so the extra title filter only served to leave more
@@ -161,7 +233,7 @@ export const workdaySource: JobSource = {
       CYBER_QUERY_TERMS.some((term) => r.title.toLowerCase().includes(term.split(' ')[0]));
     const targets = [...results]
       .sort((a, b) => Number(looksRelevant(b)) - Number(looksRelevant(a)))
-      .slice(0, 80);
+      .slice(0, 120);
 
     await mapLimit(targets, 3, async (job) => {
       if (ctx.deadline.expired) return;
