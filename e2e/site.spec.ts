@@ -396,7 +396,7 @@ test.describe('filter panel layout', () => {
     await home(page, 'arrangement=onsite&experience=senior');
     const bar = page.getByLabel('Active filters');
     await expect(bar.getByText('On-site', { exact: true })).toBeVisible();
-    await expect(bar.getByText('Senior', { exact: true })).toBeVisible();
+    await expect(bar.getByText('Senior-Level', { exact: true })).toBeVisible();
     await bar.getByRole('button', { name: 'Remove filter: On-site' }).click();
     await expect(page).not.toHaveURL(/arrangement=/);
     await expect(page).toHaveURL(/experience=senior/);
@@ -435,11 +435,32 @@ test.describe('filter panel layout', () => {
     await search.fill('zzzz');
     await expect(filters(page).getByText(/No match for/)).toBeVisible();
 
+    // The city step only appears once a region is picked (or there is
+    // realistically only one to pick), the cascade this filter panel is built
+    // around — so select Ontario first, as a reader following the cascade would.
+    await filters(page).locator('input[name="provinces"][value="ON"]').click();
     const cities = filters(page).getByPlaceholder('Search cities');
     await cities.fill('otta');
     await expect(filters(page).locator('input[name="cities"][value="Ottawa"]')).toBeVisible();
     await filters(page).locator('input[name="cities"][value="Ottawa"]').click();
     await expect(page).toHaveURL(/city=Ottawa/);
+  });
+
+  test('location cascades: country reveals region, region reveals city', async ({ page }) => {
+    await home(page);
+    await openSection(page, /^Location/);
+    // No region ticked yet: the city step requires one first, whether or not
+    // the region step itself needed a country click to appear (depends on how
+    // many countries the current fixture actually has postings in).
+    await expect(filters(page).getByPlaceholder('Search cities')).toHaveCount(0);
+    const canada = filters(page).locator('input[name="countries"][value="Canada"]');
+    if (await canada.count()) {
+      await canada.click();
+      await expect(page).toHaveURL(/country=Canada/);
+    }
+    await expect(filters(page).locator('input[name="provinces"]').first()).toBeVisible();
+    await filters(page).locator('input[name="provinces"]').first().click();
+    await expect(filters(page).getByPlaceholder('Search cities')).toBeVisible();
   });
 });
 
