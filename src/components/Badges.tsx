@@ -38,8 +38,36 @@ export function EmploymentBadge({ job }: { job: Job }) {
   return <span className="badge">{EMPLOYMENT_LABELS[job.employmentType]}</span>;
 }
 
+/**
+ * Four tinted clusters, not twenty-one distinct colours — enough for the eye
+ * to sort "defend" from "build" from "govern" from "offense" at a glance
+ * without the board turning into a palette swatch. Categories with no strong
+ * cluster (sales engineering, the IT pathway, "Other") stay the same neutral
+ * every other badge uses.
+ */
+const CATEGORY_TINT: Partial<Record<Job['category'], string>> = {
+  soc_analysis: 'badge-accent',
+  incident_response: 'badge-accent',
+  threat_intelligence: 'badge-accent',
+  dfir: 'badge-accent',
+  vulnerability_management: 'badge-accent',
+  penetration_testing: 'badge-warn',
+  grc: 'badge-good',
+  privacy_data_protection: 'badge-good',
+  security_leadership: 'badge-good',
+  security_administration: 'badge-good',
+  cloud_security: 'badge-brand',
+  application_security: 'badge-brand',
+  network_security: 'badge-brand',
+  security_engineering: 'badge-brand',
+  devsecops: 'badge-brand',
+  security_architecture: 'badge-brand',
+  ot_ics_security: 'badge-brand',
+  iam_pam: 'badge-brand',
+};
+
 export function CategoryBadge({ job }: { job: Job }) {
-  return <span className="badge">{CATEGORY_LABELS[job.category]}</span>;
+  return <span className={`badge ${CATEGORY_TINT[job.category] ?? ''}`}>{CATEGORY_LABELS[job.category]}</span>;
 }
 
 export function PathwayBadge({ job }: { job: Job }) {
