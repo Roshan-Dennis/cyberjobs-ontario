@@ -42,13 +42,25 @@ export const config = {
 
   ingest: {
     /** Hard ceiling on wall-clock time for one ingestion run (serverless limits). */
-    maxDurationMs: num(process.env.INGEST_MAX_DURATION_MS, 240_000),
+    // The global ceiling across every source combined, sources running in
+    // sequence. Sized for the current source list (63+ Greenhouse boards, 180
+    // Workday discovery candidates, Job Bank's crawl-delay-limited scraping) —
+    // 240s was calibrated for a much smaller, Canada-only source list and was
+    // silently starving whichever source ran last (Job Bank) of its own
+    // budget once Workday discovery started consuming most of its 200s most
+    // runs. The GitHub Actions job allows 30 minutes; this still leaves ample
+    // room for checkout, npm ci, the static build and the Pages deploy.
+    maxDurationMs: num(process.env.INGEST_MAX_DURATION_MS, 720_000),
     /**
      * Ceiling for any single source. Without this one slow source starves the
      * rest — in the first live run Workday consumed 231s of a 300s budget and
      * Arbeitnow never ran at all.
      */
-    maxSourceDurationMs: num(process.env.INGEST_MAX_SOURCE_MS, 90_000),
+    // Default per-source cap for sources with no override of their own
+    // (Greenhouse, Lever, Ashby, Workable, Recruitee, SmartRecruiters,
+    // Arbeitnow). Modest bump alongside the global budget above, headroom for
+    // the now much larger Greenhouse/Ashby board lists.
+    maxSourceDurationMs: num(process.env.INGEST_MAX_SOURCE_MS, 120_000),
     concurrency: num(process.env.INGEST_CONCURRENCY, 4),
     minRelevance: num(process.env.INGEST_MIN_RELEVANCE, 25),
     includePathway: bool(process.env.INGEST_INCLUDE_PATHWAY, true),
