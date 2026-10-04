@@ -1,0 +1,78 @@
+name: Continuous audit
+
+# A second, independent pipeline from Publish to GitHub Pages. It collects no
+# new postings — it re-checks the ones already live: confirms a rotating batch
+# of apply links still resolve, and re-runs relevance/geography on every live
+# posting against today's rules. See scripts/audit.ts and the "Continuous
+# audit" paragraph on the Sources page for what this actually does and why.
+
+on:
+  schedule:
+    # Every 4 hours, well clear of the hourly collector's :19 so the two never
+    # start a run in the same minute.
+    - cron: '47 */4 * * *'
+  workflow_dispatch:
+    inputs:
+      max:
+        description: 'Links to check this run'
+        required: false
+        default: '250'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Shares the collector's concurrency group: whichever of the two is mid-deploy
+# finishes first, the other waits rather than racing it or being cancelled —
+# cancelling either one would leave the site on a half-written snapshot.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Check link health and relevance
+        run: npm run audit -- --budget 420000 --max ${{ github.event.inputs.max || '250' }}
+        env:
+          PREVIOUS_SNAPSHOT_URL: ${{ vars.SITE_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}/data/jobs.full.json
+          CRAWLER_CONTACT: ${{ vars.CRAWLER_CONTACT || github.server_url }}/${{ github.repository }}
+
+      - name: Build static site
+        run: npm run build:static
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+          NEXT_PUBLIC_SITE_URL: ${{ vars.SITE_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}
+          NEXT_PUBLIC_BASE_PATH: ${{ vars.BASE_PATH != null && vars.BASE_PATH || format('/{0}', github.event.repository.name) }}
+
+      - name: Report what the audit found
+        run: |
+          echo "### Audit run" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          node -p "const a=require('./public/data/link-audit.json'); const c=Object.values(a.checks); \`checked (cumulative) \${c.length}  dead \${c.filter(x=>x.status==='dead').length}  inconclusive \${c.filter(x=>x.status==='inconclusive').length}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+      - id: deploy
+        uses: actions/deploy-pages@v4
