@@ -1,16 +1,29 @@
-import type { CSSProperties } from 'react';
+'use client';
+
+import { useState, type CSSProperties } from 'react';
+import { companyKey } from '@/lib/normalize/companyKey';
+import { COMPANY_DOMAINS } from '@/lib/companyDomains';
 
 /**
- * Company avatar placeholder.
+ * Company avatar: a real logo when the employer is on the verified domain
+ * list, initials on a deterministic tint otherwise.
  *
- * Real logos would mean hotlinking third-party assets from a static site with
- * no image proxy — slow, fragile, and a privacy leak for visitors. Initials on
- * a deterministic tint give the eye the same scanning anchor at zero cost, and
- * the same employer always renders the same colour, so repeat companies become
- * recognisable down a long list.
+ * The initials fallback (both for unmapped companies and for a logo image
+ * that fails to load) was the whole avatar until this change, and the
+ * reasoning for it still holds for anything not on the verified list:
+ * hotlinking a guessed domain risks showing the WRONG company's logo, which
+ * is worse than initials. So this only ever requests an image for a company
+ * this code can already name a real domain for — nothing is guessed.
  *
- * Each tint carries a light and a dark foreground; `globals.css` picks between
- * them so contrast holds in both themes.
+ * The image comes from Google's public favicon service, which needs no API
+ * key and no sign-up (the domain map above is what makes this safe — this
+ * service will return *something* for almost any domain string, so it is
+ * never used to validate a guess, only to fetch the icon for one already
+ * confirmed by hand). It returns a small icon, not a full logo — noticeably
+ * lower-resolution than a dedicated logo API, but it works today with zero
+ * setup. A higher-resolution option (Logo.dev) exists but needs a free
+ * account and a publishable API key only the site owner can create; this
+ * can switch to it later by adding that key as a repository variable.
  */
 
 /** Tints sit at similar lightness so no single card shouts louder than another. */
@@ -42,17 +55,36 @@ export function initials(name: string): string {
   return `${words[0][0] ?? ''}${words[1][0] ?? ''}`;
 }
 
-export function CompanyAvatar({ company, className = '' }: { company: string; className?: string }) {
+function InitialsAvatar({ company, className }: { company: string; className: string }) {
   const tint = TINTS[hash(company) % TINTS.length];
   const style = {
     '--a-bg': tint.bg,
     '--a-fg': tint.fg,
     '--a-fg-dark': tint.fgDark,
   } as CSSProperties;
-
   return (
     <span className={`avatar ${className}`} style={style} aria-hidden>
       {initials(company)}
     </span>
+  );
+}
+
+export function CompanyAvatar({ company, className = '' }: { company: string; className?: string }) {
+  const domain = COMPANY_DOMAINS[companyKey(company)];
+  const [failed, setFailed] = useState(false);
+
+  if (!domain || failed) {
+    return <InitialsAvatar company={company} className={className} />;
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- external favicon URL, not a local asset next/image can optimise
+    <img
+      src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`}
+      alt=""
+      aria-hidden
+      className={`avatar bg-surface2 object-contain p-1.5 ring-1 ring-inset ring-line ${className}`}
+      onError={() => setFailed(true)}
+    />
   );
 }
