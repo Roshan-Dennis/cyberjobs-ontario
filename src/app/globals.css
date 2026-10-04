@@ -98,6 +98,26 @@ body {
     @apply bg-warn/15 text-warn;
   }
 
+  /* Category-cluster tints (see CATEGORY_TINT in Badges.tsx). Same opacity
+     recipe as badge-remote/badge-hybrid/badge-alert above, so a category
+     badge never reads as more "important" than the arrangement badge next to
+     it — same weight, different hue. */
+  .badge-brand {
+    @apply bg-brand/15 text-brand;
+  }
+
+  .badge-accent {
+    @apply bg-accent/15 text-accent;
+  }
+
+  .badge-good {
+    @apply bg-good/15 text-good;
+  }
+
+  .badge-warn {
+    @apply bg-warn/15 text-warn;
+  }
+
   .tag {
     @apply inline-flex items-center gap-1 rounded-full border border-line bg-transparent px-2.5 py-0.5 text-xs font-medium text-muted transition-colors;
   }
