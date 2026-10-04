@@ -23,6 +23,14 @@ import { parseWorkdaySites, discoverTenant, MAX_SITES_PER_TENANT } from '../src/
 import { searchJobs, filtersFromSearchParams, searchParamsFromFilters, countActiveFilters } from '../src/lib/query';
 import { parseSalary } from '../src/lib/normalize/salary';
 import { matchLocation } from '../src/lib/taxonomy/canada';
+import { COMPANY_DOMAINS } from '../src/lib/companyDomains';
+import {
+  GREENHOUSE_BOARDS,
+  LEVER_BOARDS,
+  ASHBY_BOARDS,
+  WORKDAY_TENANTS,
+  WORKDAY_DISCOVER,
+} from '../src/lib/sources/companies';
 import { US_STATE_CODES, US_STATE_NAMES } from '../src/lib/taxonomy/states';
 import { classify } from '../src/lib/normalize/relevance';
 import { normalizeTitle, inferExperienceLevel, cleanTitle } from '../src/lib/taxonomy/titles';
@@ -1348,6 +1356,31 @@ section('Continuous audit: pure decision logic');
   const pruned = pruneAuditChecks({ a: deadChecks.a, zzz: deadChecks.a }, new Set(['a', 'b', 'c']));
   check('Pruning keeps checks for ids still on the board', 'a' in pruned);
   check('Pruning drops checks for ids no longer on the board', !('zzz' in pruned), Object.keys(pruned));
+}
+
+
+/* ------------------------------------------------------------------ */
+section('Company logos: domain map');
+
+{
+  const bad = Object.entries(COMPANY_DOMAINS).filter(([, domain]) => !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain));
+  check('Every mapped domain looks like a real domain', bad.length === 0, bad);
+
+  const keys = Object.keys(COMPANY_DOMAINS);
+  check('No duplicate keys (object literal would have silently kept only the last)', new Set(keys).size === keys.length);
+
+  check('BlackBerry and BlackBerry QNX share one domain entry (same companyKey)', companyKey('BlackBerry QNX') === companyKey('BlackBerry') && COMPANY_DOMAINS[companyKey('BlackBerry QNX')] === 'blackberry.com');
+
+  // A coverage floor, not 100%: new employers can be added to companies.ts
+  // without a matching domain (they just show initials until one is added),
+  // but a real regression — keys drifting out of sync with companyKey(),
+  // say — should fail loudly rather than quietly degrade to initials
+  // everywhere.
+  const curated = [...GREENHOUSE_BOARDS, ...LEVER_BOARDS, ...ASHBY_BOARDS, ...WORKDAY_TENANTS, ...WORKDAY_DISCOVER];
+  const labels = [...new Set(curated.map((b) => b.label))];
+  const covered = labels.filter((l) => companyKey(l) in COMPANY_DOMAINS);
+  const ratio = covered.length / labels.length;
+  check(`At least 85% of curated employers have a mapped domain (got ${Math.round(ratio * 100)}%)`, ratio >= 0.85, { covered: covered.length, total: labels.length });
 }
 
 /* ------------------------------------------------------------------ */
