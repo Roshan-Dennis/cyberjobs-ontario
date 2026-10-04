@@ -179,4 +179,42 @@ export const US_PLACES: StatePlace[] = [
   P('Philadelphia', 'PA', 'Philadelphia'),
   P('Pittsburgh', 'PA', 'Pittsburgh'),
   P('Providence', 'RI', 'Providence'),
+
+  // ---------------- Filling every remaining state with at least one real
+  // place, so a resolved state is never also a city-level dead end. A few of
+  // these carry real weight for this board specifically: Huntsville AL
+  // (Redstone Arsenal, defense and aerospace) and Albuquerque NM (Sandia
+  // National Labs) are genuine cybersecurity employment centres, not just
+  // population fill. ----------------
+  P('Huntsville', 'AL', 'Huntsville'),
+  P('Birmingham', 'AL', 'Birmingham AL'),
+  P('Anchorage', 'AK', 'Anchorage'),
+  P('Little Rock', 'AR', 'Little Rock'),
+  P('Wilmington', 'DE', 'Wilmington DE'),
+  P('Honolulu', 'HI', 'Honolulu'),
+  P('Boise', 'ID', 'Boise'),
+  P('Des Moines', 'IA', 'Des Moines'),
+  P('Wichita', 'KS', 'Wichita'),
+  P('Overland Park', 'KS', 'Kansas City Metro'),
+  P('Louisville', 'KY', 'Louisville'),
+  P('Lexington', 'KY', 'Lexington KY'),
+  P('Portland', 'ME', 'Portland ME'),
+  P('Jackson', 'MS', 'Jackson MS'),
+  P('Billings', 'MT', 'Billings'),
+  P('Helena', 'MT', 'Helena'),
+  P('Manchester', 'NH', 'Manchester NH'),
+  P('Nashua', 'NH', 'Manchester NH'),
+  P('Albuquerque', 'NM', 'Albuquerque'),
+  P('Santa Fe', 'NM', 'Santa Fe'),
+  P('Fargo', 'ND', 'Fargo'),
+  P('Oklahoma City', 'OK', 'Oklahoma City'),
+  P('Tulsa', 'OK', 'Tulsa'),
+  P('Charleston', 'SC', 'Charleston SC'),
+  P('Columbia', 'SC', 'Columbia SC'),
+  P('Sioux Falls', 'SD', 'Sioux Falls'),
+  P('Burlington', 'VT', 'Burlington VT'),
+  P('Milwaukee', 'WI', 'Milwaukee'),
+  P('Madison', 'WI', 'Madison WI'),
+  P('Charleston', 'WV', 'Charleston WV'),
+  P('Cheyenne', 'WY', 'Cheyenne'),
 ];

@@ -115,11 +115,16 @@ const US_STATE_CODE_RE = new RegExp(`\\b(${US_STATE_CODES.map((c) => c.toLowerCa
  * know ("Remote - Texas", "CA, USA"). Built from the full state list so
  * every state has a signal even though only some have gazetteer cities.
  */
+// Sorted longest state name first: "Virginia" is a literal substring of
+// "West Virginia" (and "New York" of nothing else here, but the same risk
+// applies generally), so searching shortest-first let "West Virginia" match
+// Virginia's regex before ever reaching its own — a real bug caught by
+// testing that every state resolves by its own name.
 const STATE_SIGNALS: [USStateCode, RegExp][] = US_STATE_CODES.map((code) => {
   const name = US_STATE_NAMES[code].toLowerCase();
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return [code, new RegExp(`\\b(${escaped}|${code.toLowerCase()})\\b`)];
-});
+  return [code, new RegExp(`\\b(${escaped}|${code.toLowerCase()})\\b`)] as [USStateCode, RegExp];
+}).sort((a, b) => US_STATE_NAMES[b[0]].length - US_STATE_NAMES[a[0]].length);
 
 /**
  * Places outside Canada that a bare Canadian city name would otherwise match.
@@ -166,6 +171,18 @@ const AMBIGUOUS_CITIES = new Set([
   // United States — names shared with a Canadian place above, or well-known
   // elsewhere, need their own state or country marker to resolve.
   'portland', 'columbus', 'arlington', 'alexandria', 'fairfax', 'vienna', 'providence',
+  // Burlington, Ontario (GTA) and Burlington, Massachusetts were already both
+  // in the gazetteer without this guard — a latent bug, now fixed, that would
+  // have let a bare "Burlington" always resolve to Ontario regardless of
+  // which one a posting meant. Burlington, Vermont makes it a three-way tie.
+  'burlington',
+  // Charleston (SC and WV) and Columbia (MD and SC, now also the South
+  // Carolina capital) are each two real US places sharing one name.
+  'charleston', 'columbia',
+  // Manchester and Birmingham are state capitals/major cities here (NH, AL)
+  // and also major UK cities this gazetteer does not otherwise list — a bare
+  // mention should not quietly become New Hampshire or Alabama.
+  'manchester', 'birmingham',
 ]);
 
 export interface GeoMatch {
@@ -223,32 +240,58 @@ export function matchLocation(raw: string | null | undefined): GeoMatch {
   let matchCountry: 'Canada' | 'United States' | null = null;
   let matchRegion: RegionCode | null = null;
 
-  for (const entry of INDEX) {
-    // Word-boundary-ish containment on the normalised string.
-    if (lower.includes(` ${entry.needle} `) || lower.includes(` ${entry.needle},`)) {
-      city = entry.place.name;
-      region = entry.place.region;
-      matchCountry = entry.country;
-      matchRegion = entry.region;
-      break;
+  // Computed before the city match (not after, as earlier versions of this
+  // function had it): several city names exist in more than one state or
+  // province — Charleston is SC and WV, Columbia is MD and SC — and an
+  // explicit code in the string is the tie-breaker. Finding it first lets the
+  // city loop below prefer the entry whose region actually matches.
+  const namedProvince = PROVINCE_SIGNALS.find(([, re]) => re.test(lower))?.[0] ?? null;
+  const namedState = STATE_SIGNALS.find(([, re]) => re.test(lower))?.[0] ?? null;
+  const explicitRegion: RegionCode | null = namedProvince ?? namedState;
+
+  /**
+   * Among entries whose needle matches, prefer one whose region agrees with
+   * an explicit code already found in the string; otherwise the first (index
+   * order — longest needle first, Canada before US at equal length).
+   */
+  function pick(candidates: IndexEntry[]): IndexEntry | null {
+    if (candidates.length === 0) return null;
+    if (explicitRegion) {
+      const agree = candidates.find((c) => c.region === explicitRegion);
+      if (agree) return agree;
+    }
+    return candidates[0];
+  }
+
+  // "Washington State" is unambiguous — nobody ever means DC by it — unlike a
+  // bare "Washington", which more often does mean DC in real postings. The
+  // gazetteer's Washington-DC entry would otherwise shadow it the same way,
+  // since "Washington" is a literal prefix of "Washington State".
+  const isWashingtonState = /\bwashington state\b/.test(lower);
+  const indexForCity = isWashingtonState ? INDEX.filter((e) => !(e.place.name === 'Washington' && e.region === 'DC')) : INDEX;
+
+  {
+    const exact = indexForCity.filter((e) => lower.includes(` ${e.needle} `) || lower.includes(` ${e.needle},`));
+    const found = pick(exact);
+    if (found) {
+      city = found.place.name;
+      region = found.place.region;
+      matchCountry = found.country;
+      matchRegion = found.region;
     }
   }
 
   // Fallback: substring match for longer names (handles "Toronto/Ontario").
   if (!city) {
-    for (const entry of INDEX) {
-      if (entry.needle.length >= 5 && lower.includes(entry.needle)) {
-        city = entry.place.name;
-        region = entry.place.region;
-        matchCountry = entry.country;
-        matchRegion = entry.region;
-        break;
-      }
+    const sub = indexForCity.filter((e) => e.needle.length >= 5 && lower.includes(e.needle));
+    const found = pick(sub);
+    if (found) {
+      city = found.place.name;
+      region = found.place.region;
+      matchCountry = found.country;
+      matchRegion = found.region;
     }
   }
-
-  const namedProvince = PROVINCE_SIGNALS.find(([, re]) => re.test(lower))?.[0] ?? null;
-  const namedState = STATE_SIGNALS.find(([, re]) => re.test(lower))?.[0] ?? null;
   const mentionsCanada =
     CANADA_MARKERS.some((m) => lower.includes(key(m))) || CANADA_PROVINCE_CODES.test(lower) || namedProvince !== null;
   const mentionsUS = US_MARKERS.test(lower) || namedState !== null || US_STATE_CODE_RE.test(lower);
@@ -265,7 +308,13 @@ export function matchLocation(raw: string | null | undefined): GeoMatch {
   // merits via AMBIGUOUS_CITIES/matchCountry below.
   const explicitCountrySignal =
     CANADA_MARKERS.some((m) => lower.includes(key(m))) || CANADA_PROVINCE_CODES.test(lower) || US_MARKERS.test(lower) || US_STATE_CODE_RE.test(lower);
-  if (FOREIGN_MARKERS.test(lower) && !explicitCountrySignal) {
+  // "New Mexico" contains "mexico" as a literal substring with its own word
+  // boundaries, so the foreign-country marker for Mexico the country would
+  // otherwise fire on the New Mexico state name. This is the one marker that
+  // needs the exclusion — no other FOREIGN_MARKERS entry is also a US state
+  // name's tail.
+  const isActuallyNewMexico = /\bnew mexico\b/.test(lower);
+  if (FOREIGN_MARKERS.test(lower) && !explicitCountrySignal && !isActuallyNewMexico) {
     return empty(isRemote, { isForeign: true });
   }
 
