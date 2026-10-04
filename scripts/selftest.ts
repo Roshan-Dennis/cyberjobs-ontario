@@ -18,6 +18,7 @@ import { CAREERS, CAREER_BY_SLUG, CAREER_MAP } from '../src/lib/careers/catalog'
 import { careerStats, jobsFor, boardLink } from '../src/lib/careers/stats';
 import { QUIZ, scoreQuiz } from '../src/lib/careers/quiz';
 import { GLOSSARY } from '../src/lib/careers/glossary';
+import { applyDeadLinks, orderByLastChecked, pruneAuditChecks } from '../src/lib/audit';
 import { parseWorkdaySites, discoverTenant, MAX_SITES_PER_TENANT } from '../src/lib/sources/workday-discovery';
 import { searchJobs, filtersFromSearchParams, searchParamsFromFilters, countActiveFilters } from '../src/lib/query';
 import { parseSalary } from '../src/lib/normalize/salary';
@@ -136,9 +137,13 @@ for (const [raw, expected] of GEO_CASES) {
   check(`${raw} -> ${expected ? 'Canada' : 'foreign'}`, m.isCanada === expected, `${m.city} / ${m.country}`);
 }
 
-// A US-only posting that happens to say "Canada" in boilerplate must not pass
-// as remote-Canada. This is how a Plaid role listing New York, Seattle,
-// Raleigh and San Francisco reached the board.
+// A US-only posting that happens to say "Canada" in boilerplate must resolve
+// as a genuine US posting, not as Canadian — the Canada mention is payroll
+// boilerplate, not where the role sits. (Originally this kind of listing was
+// rejected outright, from when a Plaid role listing New York, Seattle, Raleigh
+// and San Francisco reached the board as a false Canadian match; now that the
+// US is in scope on its own merits, the right fix is admitting it correctly
+// as American, not rejecting every US posting that happens to mention Canada.)
 const usBoilerplate = normalizeJob(
   raw({
     title: 'Security Engineer',
@@ -146,7 +151,7 @@ const usBoilerplate = normalizeJob(
     description: 'Remote-friendly role. We run threat detection and incident response. Our payroll operates across the US and Canada.',
   }),
 );
-check('US-only posting citing Canada in prose rejected', usBoilerplate.job === null, usBoilerplate.reason);
+check('US posting citing Canada in payroll prose is admitted as American, not Canadian', usBoilerplate.job !== null && usBoilerplate.job.country === 'United States' && !usBoilerplate.job.isCanada, usBoilerplate.job && { country: usBoilerplate.job.country, isCanada: usBoilerplate.job.isCanada });
 
 const trueRemoteCanada = normalizeJob(
   raw({
@@ -185,6 +190,37 @@ for (const [raw, expected] of PROVINCE_CASES) {
 // in Canada, or the board silently becomes national.
 const mb = matchLocation('Winnipeg, MB');
 check('Out-of-scope province is Canadian but not in scope', mb.isCanada && !mb.isInScope, `${mb.isCanada}/${mb.isInScope}`);
+
+// The United States gazetteer, matched with the same rigor as Canada:
+// resolved states, ambiguous bare city names needing a signal, a US-only
+// marker admitting the posting, and a foreign city staying rejected.
+const US_CASES: [string, { region: string | null; country: string | null; inScope: boolean; foreign?: boolean }][] = [
+  ['San Francisco, CA', { region: 'CA', country: 'United States', inScope: true }],
+  ['Arlington, VA', { region: 'VA', country: 'United States', inScope: true }],
+  ['Remote - United States', { region: null, country: 'United States', inScope: false }],
+  ['Remote - Texas', { region: 'TX', country: 'United States', inScope: true }],
+  ['Portland', { region: null, country: null, inScope: false }], // ambiguous: OR or ME, no signal
+  ['Portland, OR', { region: 'OR', country: 'United States', inScope: true }],
+  ['Richmond, VA', { region: 'VA', country: 'United States', inScope: true }],
+  ['Richmond, BC', { region: 'BC', country: 'Canada', inScope: true }],
+  ['Mexico City', { region: null, country: null, inScope: false, foreign: true }],
+  ['Cambridge, MA', { region: 'MA', country: 'United States', inScope: true }],
+  ['Cambridge, ON', { region: 'ON', country: 'Canada', inScope: true }],
+  ['Cambridge', { region: null, country: null, inScope: false }], // ambiguous: ON, MA or England
+];
+for (const [raw, expected] of US_CASES) {
+  const m = matchLocation(raw);
+  check(
+    `${raw} -> region ${expected.region ?? 'none'}, ${expected.country ?? 'no country'}, ${expected.inScope ? 'in scope' : 'out of scope'}`,
+    m.province === expected.region && m.country === expected.country && m.isInScope === expected.inScope && Boolean(m.isForeign) === Boolean(expected.foreign),
+    m,
+  );
+}
+
+// isOntario/isCanada/isUnitedStates are mutually sensible: never both countries at once.
+check('A resolved US posting is never also flagged Canadian', matchLocation('Austin, TX').isCanada === false);
+check('A resolved Canadian posting is never also flagged American', matchLocation('Toronto, ON').isUnitedStates === false);
+check('Quebec French-language city matching is unaffected by the US addition', matchLocation('Montréal, QC').province === 'QC');
 
 /* ------------------------------------------------------------------ */
 section('French-language postings');
@@ -261,7 +297,7 @@ const crossing = normalizeJob(raw({ title: 'Crossing Guard', description: 'Schoo
 check('Crossing guard rejected', crossing.job === null);
 
 const usJob = normalizeJob(raw({ locationRaw: 'Austin, TX, United States' }));
-check('Out-of-province rejected', usJob.job === null, usJob.reason);
+check('A resolved US state is admitted (the US is in scope now)', usJob.job !== null && usJob.job.province === 'TX', usJob.job && usJob.job.province);
 
 const remoteCa = normalizeJob(
   raw({
@@ -639,6 +675,11 @@ const carriedBC = revalidate([mk('bc', { locationRaw: 'Vancouver, BC', city: nul
 check('Carried BC posting kept now that BC is covered', carriedBC.dropped === 0, carriedBC.dropped);
 check('Carried BC posting gains its province', carriedBC.jobs[0]?.province === 'BC', carriedBC.jobs[0]?.province);
 
+const carriedUS = revalidate([mk('tx', { locationRaw: 'Austin, TX', city: null, region: null, province: null, country: null, isUnitedStates: false, workArrangement: 'onsite' })]);
+check('Carried US posting kept and healed', carriedUS.dropped === 0 && carriedUS.jobs[0]?.province === 'TX' && carriedUS.jobs[0]?.isUnitedStates === true, carriedUS.jobs[0]);
+const carriedRemoteUS = revalidate([mk('rus', { locationRaw: 'Remote - United States', city: null, region: null, province: null, country: null, isCanada: false, isUnitedStates: false, workArrangement: 'remote', description: 'SIEM and incident response.' })]);
+check('Carried genuinely-remote-US posting kept', carriedRemoteUS.dropped === 0, carriedRemoteUS.dropped);
+
 const healed = revalidate([mk('h', { locationRaw: 'Ottawa, ON', city: 'Tornto', region: 'Wrong' })]);
 check('Stale city corrected in place', healed.jobs[0]?.city === 'Ottawa', healed.jobs[0]?.city);
 
@@ -862,12 +903,18 @@ check('Hide-pathway option counts as active', countActiveFilters({ includePathwa
   check('Carried posting title re-cased', fixed?.title === 'Informatics Security Consultant', fixed?.title);
 }
 
-// Deep links follow the province/city filters instead of assuming Ontario.
+// Deep links follow the country/province/city filters instead of assuming Ontario.
+// cityRegion is a region CODE (never ambiguous between a province and a
+// state), matching what the real caller (JobBrowser) now passes.
 {
   const li = (f: Parameters<typeof buildDeepLinks>[0], p?: string) => new URL(buildDeepLinks(f, p)[0].url).searchParams.get('location');
-  check('Calgary searches Alberta', li({ cities: ['Calgary'] }, 'Alberta') === 'Calgary, Alberta, Canada', li({ cities: ['Calgary'] }, 'Alberta'));
+  check('Calgary searches Alberta', li({ cities: ['Calgary'] }, 'AB') === 'Calgary, Alberta, Canada', li({ cities: ['Calgary'] }, 'AB'));
   check('Quebec filter searches Quebec', li({ provinces: ['QC'] }) === 'Quebec, Canada', li({ provinces: ['QC'] }));
   check('No filter keeps Ontario default', li({}) === 'Ontario, Canada', li({}));
+  check('Austin searches Texas, United States', li({ cities: ['Austin'] }, 'TX') === 'Austin, Texas, United States', li({ cities: ['Austin'] }, 'TX'));
+  check('A US state filter searches that state', li({ provinces: ['NY'] }) === 'New York, United States', li({ provinces: ['NY'] }));
+  check('A country filter alone searches the whole country', li({ countries: ['United States'] }) === 'United States', li({ countries: ['United States'] }));
+  check('Mixing US states falls back to the whole country', li({ provinces: ['NY', 'CA'] }) === 'United States', li({ provinces: ['NY', 'CA'] }));
 }
 
 
@@ -1214,6 +1261,38 @@ const asyncChecks = (async () => {
   const kept = await discoverTenant(cand, deps({ expired: () => true, previous: { generatedAt: '', entries: [e] } }));
   check('A previously found employer keeps its sites when time runs out', kept.status === 'found' && kept.sites.length === 1, kept);
 })();
+
+
+/* ------------------------------------------------------------------ */
+section('Continuous audit: pure decision logic');
+
+{
+  const jobs = [mk('a'), mk('b'), mk('c')];
+
+  const checks = {
+    a: { checkedAt: '2026-09-01T00:00:00.000Z', status: 'live' as const },
+    c: { checkedAt: '2026-09-15T00:00:00.000Z', status: 'live' as const },
+  };
+  const ordered = orderByLastChecked(jobs, checks);
+  check('Never-checked job sorts first', ordered[0].id === 'b', ordered.map((x) => x.id));
+  check('Among checked jobs, the older check sorts before the newer one', ordered[1].id === 'a' && ordered[2].id === 'c', ordered.map((x) => x.id));
+  check('orderByLastChecked does not mutate its input', jobs.map((x) => x.id).join() === 'a,b,c');
+
+  const deadChecks = {
+    a: { checkedAt: '2026-10-01T00:00:00.000Z', status: 'dead' as const, httpStatus: 404 },
+    b: { checkedAt: '2026-10-01T00:00:00.000Z', status: 'live' as const, httpStatus: 200 },
+    c: { checkedAt: '2026-10-01T00:00:00.000Z', status: 'inconclusive' as const, httpStatus: 403 },
+  };
+  const applied = applyDeadLinks(jobs, deadChecks);
+  check('A confirmed-dead link is marked expired', applied.find((x) => x.id === 'a')?.isExpired === true);
+  check('A live link is left alone', applied.find((x) => x.id === 'b')?.isExpired === false);
+  check('An inconclusive check (403, timeout, robots-disallowed) never expires a job', applied.find((x) => x.id === 'c')?.isExpired === false);
+  check('A job with no check at all is untouched', applyDeadLinks(jobs, {}).every((x) => x.isExpired === false));
+
+  const pruned = pruneAuditChecks({ a: deadChecks.a, zzz: deadChecks.a }, new Set(['a', 'b', 'c']));
+  check('Pruning keeps checks for ids still on the board', 'a' in pruned);
+  check('Pruning drops checks for ids no longer on the board', !('zzz' in pruned), Object.keys(pruned));
+}
 
 /* ------------------------------------------------------------------ */
 void asyncChecks.then(
