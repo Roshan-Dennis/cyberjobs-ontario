@@ -38,8 +38,9 @@ export default function AboutPage() {
         </p>
         <ul className="mt-4 space-y-1.5 text-sm">
           <li>
-            <strong>Geography:</strong> every municipality in Ontario is matched against a built-in gazetteer, and
-            remote roles open to anywhere in Canada are included.
+            <strong>Geography:</strong> every Canadian province and every US state is matched against a built-in
+            gazetteer of the cities where people actually work, and remote roles open to anywhere in Canada or the
+            United States are included.
           </li>
           <li>
             <strong>Deduplication:</strong> postings are fingerprinted on normalised title + employer + location, so the
@@ -52,6 +53,12 @@ export default function AboutPage() {
           <li>
             <strong>Pathway roles:</strong> help desk, NOC, sysadmin, network and cloud roles with real security
             exposure are flagged separately so you can include or exclude them.
+          </li>
+          <li>
+            <strong>Continuous audit:</strong> a second, independent automation runs through the day on its own
+            schedule. It re-checks every posting&rsquo;s apply link is still live, re-runs the same relevance rules the hourly
+            collector uses, and republishes the result — so a posting that goes stale between collector runs does not
+            sit on the board for hours before anyone notices.
           </li>
         </ul>
       </section>
