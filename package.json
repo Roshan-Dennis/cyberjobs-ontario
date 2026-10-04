@@ -23,7 +23,8 @@
     "fixture": "tsx scripts/fixture-data.ts",
     "e2e": "playwright test",
     "predev": "node scripts/copy-pdf-worker.mjs",
-    "prebuild": "node scripts/copy-pdf-worker.mjs"
+    "prebuild": "node scripts/copy-pdf-worker.mjs",
+    "audit": "tsx scripts/audit.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
