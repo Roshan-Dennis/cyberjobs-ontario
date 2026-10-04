@@ -23,6 +23,7 @@ import { parseWorkdaySites, discoverTenant, MAX_SITES_PER_TENANT } from '../src/
 import { searchJobs, filtersFromSearchParams, searchParamsFromFilters, countActiveFilters } from '../src/lib/query';
 import { parseSalary } from '../src/lib/normalize/salary';
 import { matchLocation } from '../src/lib/taxonomy/canada';
+import { US_STATE_CODES, US_STATE_NAMES } from '../src/lib/taxonomy/states';
 import { classify } from '../src/lib/normalize/relevance';
 import { normalizeTitle, inferExperienceLevel, cleanTitle } from '../src/lib/taxonomy/titles';
 import { buildDeepLinks } from '../src/lib/deeplinks';
@@ -221,6 +222,61 @@ for (const [raw, expected] of US_CASES) {
 check('A resolved US posting is never also flagged Canadian', matchLocation('Austin, TX').isCanada === false);
 check('A resolved Canadian posting is never also flagged American', matchLocation('Toronto, ON').isUnitedStates === false);
 check('Quebec French-language city matching is unaffected by the US addition', matchLocation('Montréal, QC').province === 'QC');
+
+// Several city names exist in more than one state or province. The explicit
+// code in the string must be the tie-breaker, not index order — a real bug
+// caught while adding these entries: both Charleston, WV and Columbia, SC
+// silently resolved to the OTHER state of the same name (WV→SC, SC→MD)
+// until the matcher was taught to prefer the entry whose region agrees with
+// an explicit code already found in the string. Burlington is the same
+// situation between Ontario, Massachusetts and Vermont — and was never
+// guarded at all before this: a bare "Burlington, MA" would have silently
+// resolved to Ontario.
+const SAME_NAME_CASES: [string, string][] = [
+  ['Charleston, SC', 'SC'],
+  ['Charleston, WV', 'WV'],
+  ['Columbia, SC', 'SC'],
+  ['Columbia, MD', 'MD'],
+  ['Burlington, ON', 'ON'],
+  ['Burlington, MA', 'MA'],
+  ['Burlington, VT', 'VT'],
+  ['Portland, OR', 'OR'],
+  ['Portland, ME', 'ME'],
+];
+for (const [raw, expected] of SAME_NAME_CASES) {
+  check(`${raw} resolves to its own state/province, not the other one sharing its name`, matchLocation(raw).province === expected, matchLocation(raw).province);
+}
+// Each of these needs a marker precisely because it is NOT in the gazetteer
+// by itself — Manchester and Birmingham are also major UK cities this board
+// does not list, so a bare mention must not quietly become New Hampshire or
+// Alabama.
+check('Bare "Burlington" (three real places share the name) resolves to nothing', matchLocation('Burlington').city === null);
+check('Bare "Charleston" (two states share the name) resolves to nothing', matchLocation('Charleston').city === null);
+check('Bare "Manchester" does not default to New Hampshire', matchLocation('Manchester').isInScope === false);
+check('Bare "Birmingham" does not default to Alabama', matchLocation('Birmingham').isInScope === false);
+check('Huntsville, AL (defense/aerospace hub) resolves', matchLocation('Huntsville, AL').province === 'AL');
+check('Albuquerque, NM (Sandia National Labs) resolves', matchLocation('Albuquerque, NM').province === 'NM');
+// A real invariant, not a filler check: every one of the 50 states + DC must
+// resolve by its own written-out name, not just the handful with gazetteer
+// cities. This is what lets "Remote - Wyoming" work even though Wyoming has
+// only Cheyenne in the city list. WA is the one deliberate exception: a bare
+// "Washington" means the District far more often than the state in real
+// postings (the state is almost always written "Seattle, WA" or "Washington
+// State"), so the gazetteer's Washington-DC entry is allowed to win there —
+// tested separately below, not as a failure of this invariant.
+{
+  const bad = US_STATE_CODES.filter((code) => code !== 'WA' && matchLocation(`Remote - ${US_STATE_NAMES[code]}`).province !== code);
+  check('Every US state resolves by its full written-out name (DC excepted, see below)', bad.length === 0, bad);
+}
+check('A bare "Washington" means the District, not the state, matching real-world usage', matchLocation('Washington').province === 'DC');
+check('"Washington State" still resolves to the state when written that way', matchLocation('Remote - Washington State').province === 'WA', matchLocation('Remote - Washington State'));
+
+// The three bugs this expansion caught, named explicitly so a regression here
+// is never mistaken for one of the general cases above.
+check('"New Mexico" is not mistaken for the foreign country Mexico', matchLocation('Remote - New Mexico').province === 'NM' && matchLocation('Remote - New Mexico').isForeign === false, matchLocation('Remote - New Mexico'));
+check('Plain "Mexico" (the country) is still rejected as foreign', matchLocation('Mexico').isForeign === true);
+check('"Mexico City" is still rejected as foreign', matchLocation('Mexico City').isForeign === true);
+check('"West Virginia" does not resolve to Virginia (a literal substring of its name)', matchLocation('Remote - West Virginia').province === 'WV', matchLocation('Remote - West Virginia'));
 
 /* ------------------------------------------------------------------ */
 section('French-language postings');
