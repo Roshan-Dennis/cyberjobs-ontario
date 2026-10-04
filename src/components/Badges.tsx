@@ -45,7 +45,7 @@ export function EmploymentBadge({ job }: { job: Job }) {
  * cluster (sales engineering, the IT pathway, "Other") stay the same neutral
  * every other badge uses.
  */
-const CATEGORY_TINT: Partial<Record<Job['category'], string>> = {
+export const CATEGORY_TINT: Partial<Record<Job['category'], string>> = {
   soc_analysis: 'badge-accent',
   incident_response: 'badge-accent',
   threat_intelligence: 'badge-accent',
