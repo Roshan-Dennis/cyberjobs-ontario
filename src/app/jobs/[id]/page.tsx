@@ -5,6 +5,17 @@ import { relativeTime } from '@/lib/normalize/dates';
 import { formatSalary } from '@/lib/normalize/salary';
 import { CATEGORY_LABELS, EMPLOYMENT_LABELS, EXPERIENCE_LABELS } from '@/lib/types';
 import { SaveButton } from '@/components/SaveButton';
+import {
+  ArrangementBadge,
+  CATEGORY_TINT,
+  CategoryBadge,
+  EmploymentBadge,
+  ExperienceBadge,
+  ExpiredBadge,
+  LanguageBadge,
+  PathwayBadge,
+  RepostBadge,
+} from '@/components/Badges';
 import { AtsChecker } from '@/components/AtsChecker';
 import { MarkViewed } from '@/components/MarkViewed';
 import { BackToSearch } from '@/components/BackToSearch';
@@ -67,6 +78,8 @@ export default async function JobPage({ params }: Props) {
 
   const salary = formatSalary(job.salary);
   const r = job.requirements;
+  // Mirrors JobCard's flag so the board and the detail page read the same way.
+  const countryFlag = job.country === 'Canada' ? '🇨🇦' : job.country === 'United States' ? '🇺🇸' : null;
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
@@ -78,27 +91,29 @@ export default async function JobPage({ params }: Props) {
         <h1 className="mt-3 text-2xl font-semibold leading-tight">{job.title}</h1>
         <p className="mt-1 text-base text-muted">
           <span className="font-medium text-ink">{job.company}</span>
-          {job.city ? ` · ${job.city}` : ''}
+          {job.city || job.region ? ' · ' : ''}
+          {countryFlag ? <span aria-hidden>{countryFlag} </span> : null}
+          {job.city ?? ''}
           {job.region ? ` (${job.region})` : ''}
         </p>
 
+        {/* Same badge components the job cards use (including the tinted
+            category colour), so a reader does not see one treatment on the
+            board and a plainer one once they click through. */}
         <div className="mt-3 flex flex-wrap gap-1.5">
-          <span className="badge">{CATEGORY_LABELS[job.category]}</span>
+          <CategoryBadge job={job} />
           {job.secondaryCategories.map((c) => (
-            <span key={c} className="badge">
+            <span key={c} className={`badge ${CATEGORY_TINT[c] ?? ''}`}>
               {CATEGORY_LABELS[c]}
             </span>
           ))}
-          {job.workArrangement !== 'unknown' ? (
-            <span className="badge capitalize">{job.workArrangement}</span>
-          ) : null}
-          {job.experienceLevel !== 'unknown' ? <span className="badge">{EXPERIENCE_LABELS[job.experienceLevel]}</span> : null}
-          {job.employmentType !== 'unknown' ? <span className="badge">{EMPLOYMENT_LABELS[job.employmentType]}</span> : null}
-          {job.isPathwayRole ? (
-            <span className="badge badge-alert">Pathway into cyber</span>
-          ) : null}
-          {job.language === 'fr' ? <span className="badge" title="This posting is written in French">FR</span> : null}
-          {job.isExpired ? <span className="badge text-muted">Likely expired</span> : null}
+          <ArrangementBadge job={job} />
+          <ExperienceBadge job={job} />
+          <EmploymentBadge job={job} />
+          <PathwayBadge job={job} />
+          <RepostBadge job={job} />
+          <LanguageBadge job={job} />
+          <ExpiredBadge job={job} />
         </div>
 
         <div className="mt-5 border-t border-line pt-5">
