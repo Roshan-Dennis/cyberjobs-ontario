@@ -21,6 +21,15 @@ export const config = {
   appName: process.env.NEXT_PUBLIC_APP_NAME ?? 'CyberJobs',
   siteUrl: process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000',
 
+  /**
+   * Google Analytics 4 Measurement ID (G-XXXXXXXXXX). Analytics is disabled
+   * unless it matches that shape, so a typo can never inject arbitrary text
+   * into the page's inline script.
+   */
+  gaMeasurementId: /^G-[A-Z0-9]{4,20}$/.test((process.env.NEXT_PUBLIC_GA_ID ?? '').trim())
+    ? (process.env.NEXT_PUBLIC_GA_ID ?? '').trim()
+    : '',
+
   supabase: {
     url: process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
     serviceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? '',

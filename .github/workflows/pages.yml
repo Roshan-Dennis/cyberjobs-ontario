@@ -66,6 +66,9 @@ jobs:
         run: npm run build:static
         env:
           NEXT_TELEMETRY_DISABLED: '1'
+          # Optional: GA4 Measurement ID (G-XXXXXXXXXX) from the repository
+          # variable GA_MEASUREMENT_ID. Blank = analytics off.
+          NEXT_PUBLIC_GA_ID: ${{ vars.GA_MEASUREMENT_ID }}
           NEXT_PUBLIC_SITE_URL: ${{ vars.SITE_URL || format('https://{0}.github.io/{1}', github.repository_owner, github.event.repository.name) }}
           # Set the repository variable BASE_PATH to "" if you move this to a
           # custom domain or a <user>.github.io repository.
