@@ -117,6 +117,30 @@ export default function AboutPage() {
           before applying. Nothing on this site is fabricated: if a field is unknown it is shown as unknown.
         </p>
       </section>
+
+      <section className="card p-6" id="privacy">
+        <h2 className="text-lg font-semibold">Privacy and analytics</h2>
+        <p className="mt-2 text-sm leading-relaxed">
+          This site uses Google Analytics to count visits and see which pages and postings are viewed, so the
+          site can be improved. Google Analytics sets cookies and receives your IP address, browser and device
+          details, and the pages you view; the site does not send it your name, email address or any account
+          information, because there are no accounts. You can opt out with a content blocker or Google&apos;s{' '}
+          <a
+            href="https://tools.google.com/dlpage/gaoptout"
+            className="link"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            browser opt-out add-on
+          </a>
+          .
+        </p>
+        <p className="mt-2 text-sm leading-relaxed">
+          Saved jobs, favourites and search history are stored only in your own browser and are never sent to this
+          site. A résumé you load for matching is processed in your browser and is not uploaded. Application links
+          leave this site for the employer&apos;s own page, which has its own privacy practices.
+        </p>
+      </section>
     </div>
   );
 }
