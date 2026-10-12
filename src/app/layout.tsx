@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import Link from 'next/link';
 import { config } from '@/lib/config';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { GoogleAnalytics } from '@/components/GoogleAnalytics';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -136,6 +137,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </p>
           </div>
         </footer>
+        <GoogleAnalytics />
       </body>
     </html>
   );
