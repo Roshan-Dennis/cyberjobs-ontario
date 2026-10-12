@@ -1,4 +1,4 @@
-import { decodeEscapedHtml, htmlToText, sanitizeHtml, summarize } from '@/lib/normalize/html';
+import { decodeEscapedHtml, htmlToText, plainInline, sanitizeHtml, summarize } from '@/lib/normalize/html';
 import { toIso } from '@/lib/normalize/dates';
 import { findSalaryInText, parseSalary } from '@/lib/normalize/salary';
 import { extractRequirements, buildKeywords } from '@/lib/normalize/extract';
@@ -93,7 +93,14 @@ export function isMeaningfulDescription(text: string): boolean {
   return true;
 }
 
-export function normalizeJob(raw: RawJob, opts: NormalizeOptions = DEFAULT_NORMALIZE_OPTIONS): NormalizeOutcome {
+export function normalizeJob(rawIn: RawJob, opts: NormalizeOptions = DEFAULT_NORMALIZE_OPTIONS): NormalizeOutcome {
+  // Short fields can arrive with markup (Jooble highlights matched words).
+  const raw: RawJob = {
+    ...rawIn,
+    title: plainInline(rawIn.title),
+    company: plainInline(rawIn.company),
+    locationRaw: rawIn.locationRaw == null ? rawIn.locationRaw : plainInline(rawIn.locationRaw),
+  };
   const now = opts.now ?? new Date();
   const nowIso = now.toISOString();
 

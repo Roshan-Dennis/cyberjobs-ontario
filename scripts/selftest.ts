@@ -35,7 +35,7 @@ import { US_STATE_CODES, US_STATE_NAMES } from '../src/lib/taxonomy/states';
 import { classify } from '../src/lib/normalize/relevance';
 import { normalizeTitle, inferExperienceLevel, cleanTitle } from '../src/lib/taxonomy/titles';
 import { buildDeepLinks } from '../src/lib/deeplinks';
-import { decodeEscapedHtml } from '../src/lib/normalize/html';
+import { decodeEscapedHtml, plainInline } from '../src/lib/normalize/html';
 import { mergeSnapshots, revalidate, sanityCheck } from '../src/lib/merge';
 import { TOKENS as JOBBANK_TOKENS, jobBankSource, parseDetail, parseFeed as parseJobBankFeed } from '../src/lib/sources/jobbank';
 import { activeSources } from '../src/lib/sources/registry';
@@ -505,6 +505,22 @@ const realDesc = normalizeJob(
   raw({ title: 'Security Analyst', locationRaw: 'Toronto, ON', description: 'Monitor Splunk alerts, triage incidents and escalate to tier three engineers.' }),
 );
 check('Real prose survives', (realDesc.job?.description ?? '').length > 40, realDesc.job?.description?.slice(0, 30));
+
+/* ------------------------------------------------------------------ */
+section('Markup in short fields (Jooble)');
+
+// Jooble wraps matched search words in <b> tags and &nbsp; inside titles. Every
+// one of 375 postings was rejected as "Not cybersecurity-related" until the
+// markup was stripped.
+check('Highlighted title is cleaned', plainInline('&nbsp;<b>SOC</b>&nbsp;Analyst') === 'SOC Analyst', plainInline('&nbsp;<b>SOC</b>&nbsp;Analyst'));
+check('Non-breaking spaces collapse', plainInline('Senior\u00a0\u00a0Security   Engineer') === 'Senior Security Engineer');
+check('Plain text is untouched', plainInline('Security Analyst, Co-op') === 'Security Analyst, Co-op');
+check('Null and empty are safe', plainInline(null) === '' && plainInline(undefined) === '' && plainInline('') === '');
+const joobleStyle = normalizeJob(
+  raw({ title: 'Senior&nbsp;<b>Security</b>&nbsp;Analyst', company: '<b>Acme</b> Corp', locationRaw: 'Toronto, ON', sourceId: 'jooble', sourceName: 'Jooble' }),
+);
+check('Jooble-style posting is kept', Boolean(joobleStyle.job), joobleStyle.reason ?? '');
+check('Kept title and company are plain text', joobleStyle.job?.title === 'Senior Security Analyst' && joobleStyle.job?.company === 'Acme Corp', `${joobleStyle.job?.title} / ${joobleStyle.job?.company}`);
 
 /* ------------------------------------------------------------------ */
 section('Entity-encoded HTML (Greenhouse)');

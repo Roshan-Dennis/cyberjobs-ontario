@@ -55,6 +55,21 @@ export function decodeEscapedHtml(input: string): string {
   return escaped > real ? decodeEntities(input) : input;
 }
 
+/**
+ * Clean a short single-line field (title, company, location) of markup.
+ *
+ * Jooble wraps the matched search words in `<b>` tags and `&nbsp;` entities
+ * inside titles — "&nbsp;<b>SOC</b>&nbsp;Analyst" — which the classifier read as
+ * a non-cyber title and rejected, so every Jooble posting was dropped. Strips
+ * tags, decodes entities and collapses all whitespace (including non-breaking
+ * spaces) to single spaces.
+ */
+export function plainInline(input: string | null | undefined): string {
+  if (!input) return '';
+  const noTags = input.replace(/<\/?[a-zA-Z][^>]*>/g, ' ');
+  return decodeEntities(noTags).replace(/[\s\u00a0]+/g, ' ').trim();
+}
+
 /** Convert an HTML description to readable plain text with preserved line breaks. */
 export function htmlToText(html: string): string {
   if (!html) return '';
