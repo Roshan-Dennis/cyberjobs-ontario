@@ -33,7 +33,9 @@ export const joobleSource: JobSource = {
   disabledReason: () => 'Set JOOBLE_API_KEY to enable (free key at jooble.org/api/about).',
   async fetchJobs(ctx: SourceContext): Promise<RawJob[]> {
     const results: RawJob[] = [];
-    const url = `https://ca.jooble.org/api/${config.jooble.apiKey}`;
+    // Documented endpoint (https://jooble.org/api/about). The regional ca.
+    // subdomain answered every request with HTTP 403 for a valid key.
+    const url = `https://jooble.org/api/${config.jooble.apiKey}`;
 
     for (const term of CYBER_QUERY_TERMS.slice(0, 10)) {
       if (ctx.deadline.expired) break;
