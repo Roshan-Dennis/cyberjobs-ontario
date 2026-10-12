@@ -108,12 +108,21 @@ export async function runIngest(options: IngestOptions = {}): Promise<IngestOutc
   const keptBySource = new Map<string, number>();
   const normalized: Job[] = [];
   const rejectReasons = new Map<string, number>();
+  // Per-source view of the same thing, so a source that fetches plenty but keeps
+  // nothing can be diagnosed from the run log instead of guessed at.
+  const rejectsBySource = new Map<string, { reasons: Map<string, number>; samples: string[] }>();
 
   for (const item of raw) {
     const { job, reason } = normalizeJob(item, normalizeOptions);
     if (!job) {
       const key = reason ?? 'unknown';
       rejectReasons.set(key, (rejectReasons.get(key) ?? 0) + 1);
+      const bySource = rejectsBySource.get(item.sourceId) ?? { reasons: new Map<string, number>(), samples: [] };
+      bySource.reasons.set(key, (bySource.reasons.get(key) ?? 0) + 1);
+      if (bySource.samples.length < 4) {
+        bySource.samples.push(`"${String(item.title).slice(0, 70)}" @ ${String(item.locationRaw ?? '').slice(0, 40)} -> ${key.slice(0, 80)}`);
+      }
+      rejectsBySource.set(item.sourceId, bySource);
       continue;
     }
     normalized.push(job);
@@ -124,6 +133,17 @@ export async function runIngest(options: IngestOptions = {}): Promise<IngestOutc
 
   const topRejects = [...rejectReasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
   for (const [reason, count] of topRejects) log(`filtered ${count}× ${reason}`);
+
+  // Sources that returned postings but had none survive get a detailed breakdown.
+  for (const r of reports) {
+    if (r.fetched > 0 && r.kept === 0) {
+      const detail = rejectsBySource.get(r.sourceId);
+      if (!detail) continue;
+      const top = [...detail.reasons.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4);
+      log(`${r.sourceId}: 0 of ${r.fetched} kept — ${top.map(([reason, n]) => `${n}× ${reason}`).join('; ')}`);
+      for (const sample of detail.samples) log(`${r.sourceId} sample: ${sample}`);
+    }
+  }
 
   // ---- Deduplicate ---------------------------------------------------
   const { jobs: deduped, merged } = dedupeJobs(normalized);
